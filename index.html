@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BWC Attendance - Field Test v2</title>
+<style>
+  :root { --yellow:#fff200; --black:#000; --teal:#27bdbe; --bg:#f6f6f2; --ok:#1a7f37; --warn:#b26a00; --bad:#c0262d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:#111; }
+  header { background:var(--black); color:var(--yellow); padding:14px 16px; font-weight:700; font-size:17px; }
+  header small { display:block; color:var(--teal); font-weight:500; font-size:12px; margin-top:2px; }
+  main { padding:16px; max-width:480px; margin:0 auto; }
+  .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size:14px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:#444; }
+  label { display:block; font-size:13px; margin:8px 0 4px; color:#333; }
+  input, select { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:8px; }
+  .row { display:flex; gap:8px; } .row > div { flex:1; }
+  button { width:100%; padding:13px; font-size:16px; font-weight:700; border:0; border-radius:10px; margin-top:10px; cursor:pointer; }
+  .primary { background:var(--yellow); color:#000; }
+  .secondary { background:var(--teal); color:#fff; }
+  .dark { background:#000; color:var(--yellow); }
+  button:disabled { opacity:.45; }
+  .out { font-family:ui-monospace,Menlo,monospace; font-size:13px; background:#f2f2f2; border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; min-height:20px; }
+  video, img#preview { width:100%; border-radius:10px; margin-top:10px; background:#000; display:none; transform:scaleX(-1); }
+  img#preview { transform:none; }
+  .ok { color:var(--ok); font-weight:700; } .warn { color:var(--warn); font-weight:700; } .bad { color:var(--bad); font-weight:700; }
+  #fileWrap { display:none; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>The Belgian Waffle Cafe · Attendance<small>Field test v2 (GitHub Pages): GPS + live selfie</small></header>
+<main>
+  <div class="card">
+    <h2>1 · Test details</h2>
+    <label>Tester name / phone model</label>
+    <input id="tester" placeholder="e.g. Ravi - Redmi 9A">
+    <label>Store</label>
+    <input id="store" placeholder="e.g. Velachery">
+    <div class="row">
+      <div><label>Store latitude</label><input id="sLat" inputmode="decimal" placeholder="12.9789"></div>
+      <div><label>Store longitude</label><input id="sLng" inputmode="decimal" placeholder="80.2180"></div>
+    </div>
+    <label>Where are you standing?</label>
+    <select id="spot">
+      <option>At the counter</option>
+      <option>Kitchen / back room</option>
+      <option>Store entrance</option>
+      <option>~100 m away (should flag)</option>
+      <option>Other</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <h2>2 · Location</h2>
+    <button class="secondary" id="gpsBtn" onclick="getGps()">Get my location (10 sec)</button>
+    <div class="out" id="gpsOut">Not run yet.</div>
+  </div>
+
+  <div class="card">
+    <h2>3 · Selfie</h2>
+    <button class="secondary" id="camBtn" onclick="startCam()">Open front camera</button>
+    <video id="video" autoplay playsinline muted></video>
+    <button class="dark" id="snapBtn" onclick="snap()" style="display:none">Take selfie</button>
+    <img id="preview" alt="selfie preview">
+    <div class="out" id="camOut">Not run yet.</div>
+  </div>
+
+  <button class="primary" id="sendBtn" onclick="send()">Save test result</button>
+  <div class="out" id="sendOut"></div>
+</main>
+
+<script>
+  const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
+  const st = { lat:null, lng:null, accuracy:null, gpsError:'', selfie:null, selfieMode:'' };
+  const $ = id => document.getElementById(id);
+
+  // GPS: watch for up to 10 s and keep the most accurate reading (same logic the real app will use)
+  function getGps() {
+    if (!navigator.geolocation) { st.gpsError = 'geolocation API missing'; $('gpsOut').innerHTML = '<span class="bad">Location not supported in this page.</span>'; return; }
+    $('gpsBtn').disabled = true; $('gpsOut').textContent = 'Reading GPS…';
+    let best = null;
+    const id = navigator.geolocation.watchPosition(pos => {
+      if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+      $('gpsOut').textContent = 'Best so far: ±' + Math.round(best.coords.accuracy) + ' m';
+    }, err => {
+      st.gpsError = err.code + ': ' + err.message;
+      $('gpsOut').innerHTML = '<span class="bad">GPS error ' + st.gpsError + '</span>';
+    }, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
+    setTimeout(() => {
+      navigator.geolocation.clearWatch(id); $('gpsBtn').disabled = false;
+      if (!best) { if (!st.gpsError) st.gpsError = 'no fix in 10 s'; $('gpsOut').innerHTML = '<span class="bad">No location: ' + st.gpsError + '</span>'; return; }
+      st.lat = best.coords.latitude; st.lng = best.coords.longitude; st.accuracy = best.coords.accuracy; st.gpsError = '';
+      const d = localDist();
+      $('gpsOut').innerHTML = 'Lat ' + st.lat.toFixed(6) + '\nLng ' + st.lng.toFixed(6) +
+        '\nAccuracy ±' + Math.round(st.accuracy) + ' m' + (d != null ? '\nDistance to store ≈ ' + d + ' m' : '\n(enter store lat/lng to see distance)');
+    }, 10000);
+  }
+
+  function localDist() {
+    const a = parseFloat($('sLat').value), b = parseFloat($('sLng').value);
+    if (isNaN(a) || isNaN(b) || st.lat == null) return null;
+    const R = 6371000, r = Math.PI / 180, dLat = (a - st.lat) * r, dLng = (b - st.lng) * r;
+    const h = Math.sin(dLat/2)**2 + Math.cos(st.lat*r) * Math.cos(a*r) * Math.sin(dLng/2)**2;
+    return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+  }
+
+  // Camera: live preview first (prevents gallery uploads); file-input capture as fallback
+  async function startCam() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:{ ideal:640 } }, audio:false });
+      const v = $('video'); v.srcObject = stream; v.style.display = 'block';
+      $('snapBtn').style.display = 'block'; $('camOut').textContent = 'Live camera OK (mode: live). Tap "Take selfie".';
+      st.selfieMode = 'live';
+    } catch (e) {
+      st.selfieMode = 'blocked: ' + e.name;
+      $('camOut').innerHTML = '<span class="bad">Live camera blocked (' + e.name + '). Check that camera permission is allowed for this site.</span>';
+    }
+  }
+
+  function snap() {
+    const v = $('video'); compress(v, v.videoWidth, v.videoHeight);
+    v.srcObject.getTracks().forEach(t => t.stop()); v.style.display = 'none'; $('snapBtn').style.display = 'none';
+  }
+
+
+  // Downscale to 480 px wide JPEG — target ~30–60 KB per selfie for Drive storage
+  function compress(src, w, h) {
+    const W = 480, H = Math.round(h * W / w), c = document.createElement('canvas');
+    c.width = W; c.height = H; c.getContext('2d').drawImage(src, 0, 0, W, H);
+    st.selfie = c.toDataURL('image/jpeg', 0.7);
+    $('preview').src = st.selfie; $('preview').style.display = 'block';
+    const kb = Math.round(st.selfie.length * 0.75 / 1024);
+    $('camOut').innerHTML = '<span class="ok">Selfie captured (' + st.selfieMode + ', ~' + kb + ' KB)</span>';
+  }
+
+  function send() {
+    $('sendBtn').disabled = true; $('sendOut').textContent = 'Saving…';
+    const p = {
+      tester: $('tester').value, store: $('store').value, spot: $('spot').value,
+      storeLat: parseFloat($('sLat').value), storeLng: parseFloat($('sLng').value),
+      lat: st.lat, lng: st.lng, accuracy: st.accuracy, gpsError: st.gpsError,
+      selfie: st.selfie, selfieMode: st.selfieMode, ua: navigator.userAgent
+    };
+    fetch(API, { method:'POST', body: JSON.stringify(p) })   // text/plain body = no CORS preflight
+      .then(res => res.json())
+      .then(r => {
+        if (r.error) throw new Error(r.error);
+        $('sendBtn').disabled = false;
+        const cls = r.result === 'ACCEPTED' ? 'ok' : (r.result.startsWith('FLAG') ? 'warn' : 'bad');
+        $('sendOut').innerHTML = 'Saved. Server says: <span class="' + cls + '">' + r.result + '</span>' +
+          (r.distance !== '' ? ' · ' + r.distance + ' m' : '') + (r.selfieKB ? ' · selfie ' + r.selfieKB + ' KB' : '');
+      })
+      .catch(e => { $('sendBtn').disabled = false; $('sendOut').innerHTML = '<span class="bad">Save failed: ' + e.message + '</span>'; });
+  }
+</script>
+</body>
+</html>
