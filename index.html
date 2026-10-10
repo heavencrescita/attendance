@@ -1,158 +1,198 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BWC Attendance - Field Test v2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#0d0d0d">
+<title>BWC Attendance</title>
 <style>
-  :root { --yellow:#fff200; --black:#000; --teal:#27bdbe; --bg:#f6f6f2; --ok:#1a7f37; --warn:#b26a00; --bad:#c0262d; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:#111; }
-  header { background:var(--black); color:var(--yellow); padding:14px 16px; font-weight:700; font-size:17px; }
-  header small { display:block; color:var(--teal); font-weight:500; font-size:12px; margin-top:2px; }
-  main { padding:16px; max-width:480px; margin:0 auto; }
-  .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
-  h2 { font-size:14px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:#444; }
-  label { display:block; font-size:13px; margin:8px 0 4px; color:#333; }
-  input, select { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:8px; }
-  .row { display:flex; gap:8px; } .row > div { flex:1; }
-  button { width:100%; padding:13px; font-size:16px; font-weight:700; border:0; border-radius:10px; margin-top:10px; cursor:pointer; }
-  .primary { background:var(--yellow); color:#000; }
-  .secondary { background:var(--teal); color:#fff; }
-  .dark { background:#000; color:var(--yellow); }
-  button:disabled { opacity:.45; }
-  .out { font-family:ui-monospace,Menlo,monospace; font-size:13px; background:#f2f2f2; border-radius:8px; padding:10px; margin-top:10px; white-space:pre-wrap; min-height:20px; }
-  video, img#preview { width:100%; border-radius:10px; margin-top:10px; background:#000; display:none; transform:scaleX(-1); }
-  img#preview { transform:none; }
-  .ok { color:var(--ok); font-weight:700; } .warn { color:var(--warn); font-weight:700; } .bad { color:var(--bad); font-weight:700; }
-  #fileWrap { display:none; margin-top:10px; }
+:root{--yellow:#fff200;--black:#0d0d0d;--teal:#27bdbe;--bg:#f5f5f0;--card:#fff;--ink:#141414;--muted:#6b6b66;--line:#e2e2da;--ok:#1a7f37;--okbg:#e6f4ea;--warn:#8a5200;--warnbg:#fff4dc;--bad:#b4232b;--badbg:#fde8e8}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Tamil",sans-serif;-webkit-text-size-adjust:100%}
+header{background:var(--black);color:var(--yellow);padding:14px 18px;display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;border-radius:50%;background:var(--yellow);border:3px solid var(--teal);display:grid;place-items:center;font-weight:800;color:#000;font-size:11px;flex:none}
+header b{display:block;font-size:16px}
+header small{color:var(--teal);font-size:12px}
+main{max-width:460px;margin:0 auto;padding:18px}
+.card{background:var(--card);border-radius:16px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:14px}
+label{display:block;font-size:14px;font-weight:600;margin:12px 0 6px}
+label span{display:block;font-weight:400;color:var(--muted);font-size:12.5px}
+input{width:100%;font-size:22px;padding:12px 14px;border:2px solid var(--line);border-radius:12px;letter-spacing:.06em;background:#fff;color:var(--ink)}
+input:focus{outline:none;border-color:var(--teal)}
+.prefix{display:flex;align-items:center;border:2px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.prefix:focus-within{border-color:var(--teal)}
+.prefix b{padding:0 4px 0 14px;font-size:22px;color:var(--muted)}
+.prefix input{border:0;padding-left:4px}
+button{width:100%;border:0;border-radius:14px;padding:16px;font-size:18px;font-weight:800;cursor:pointer;margin-top:14px}
+button small{display:block;font-weight:500;font-size:13px;opacity:.85;margin-top:2px}
+button:disabled{opacity:.45}
+.y{background:var(--yellow);color:#000}.t{background:var(--teal);color:#fff}.k{background:var(--black);color:var(--yellow)}.g{background:#ececE6;color:#222}
+.hello{font-size:22px;font-weight:800;margin:0}
+.muted{color:var(--muted)}
+.state{margin-top:8px;padding:10px 12px;border-radius:10px;background:#f1f1ec;font-size:14.5px;line-height:1.4}
+.cam{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:3/4;margin-top:12px}
+.cam video,.cam img{width:100%;height:100%;object-fit:cover;display:block}
+.cam video{transform:scaleX(-1)}
+.oval{position:absolute;inset:12% 18%;border:3px dashed rgba(255,242,0,.8);border-radius:50%;pointer-events:none}
+.gps{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:#bbb;flex:none}
+.dot.ok{background:var(--ok)}.dot.wait{background:#e0a800;animation:p 1s infinite}.dot.bad{background:var(--bad)}
+@keyframes p{50%{opacity:.3}}
+.result{text-align:center;padding:26px 18px}
+.big{font-size:44px;line-height:1}
+.result h2{margin:10px 0 4px;font-size:24px}
+.okc{background:var(--okbg);color:var(--ok)}.warnc{background:var(--warnbg);color:var(--warn)}
+.err{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;display:none}
+.hide{display:none}
+.foot{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
 </style>
 </head>
 <body>
-<header>The Belgian Waffle Cafe · Attendance<small>Field test v2 (GitHub Pages): GPS + live selfie</small></header>
+<header><div class="logo">BWC</div><div><b>The Belgian Waffle Cafe</b><small>Attendance · வருகைப் பதிவு</small></div></header>
 <main>
-  <div class="card">
-    <h2>1 · Test details</h2>
-    <label>Tester name / phone model</label>
-    <input id="tester" placeholder="e.g. Ravi - Redmi 9A">
-    <label>Store</label>
-    <input id="store" placeholder="e.g. Velachery">
-    <div class="row">
-      <div><label>Store latitude</label><input id="sLat" inputmode="decimal" placeholder="12.9789"></div>
-      <div><label>Store longitude</label><input id="sLng" inputmode="decimal" placeholder="80.2180"></div>
-    </div>
-    <label>Where are you standing?</label>
-    <select id="spot">
-      <option>At the counter</option>
-      <option>Kitchen / back room</option>
-      <option>Store entrance</option>
-      <option>~100 m away (should flag)</option>
-      <option>Other</option>
-    </select>
-  </div>
 
-  <div class="card">
-    <h2>2 · Location</h2>
-    <button class="secondary" id="gpsBtn" onclick="getGps()">Get my location (10 sec)</button>
-    <div class="out" id="gpsOut">Not run yet.</div>
-  </div>
+<!-- 1. Login -->
+<section id="s-login" class="card">
+  <label for="wid">WAFF number <span>WAFF எண் — e.g. 12 for WAFF-012</span></label>
+  <div class="prefix"><b>WAFF-</b><input id="wid" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="012"></div>
+  <label for="pin">PIN <span>உங்கள் 4 இலக்க PIN</span></label>
+  <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+  <button class="y" id="b-login" onclick="login()">Continue<small>தொடரவும்</small></button>
+  <div class="err" id="e-login"></div>
+</section>
 
+<!-- 2. Punch -->
+<section id="s-punch" class="hide">
   <div class="card">
-    <h2>3 · Selfie</h2>
-    <button class="secondary" id="camBtn" onclick="startCam()">Open front camera</button>
-    <video id="video" autoplay playsinline muted></video>
-    <button class="dark" id="snapBtn" onclick="snap()" style="display:none">Take selfie</button>
-    <img id="preview" alt="selfie preview">
-    <div class="out" id="camOut">Not run yet.</div>
+    <p class="hello" id="hello"></p>
+    <div class="state" id="state"></div>
+    <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval"></div></div>
+    <div class="gps"><span class="dot wait" id="gdot"></span><span id="gtxt">Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது</span></div>
+    <button class="k" id="b-punch" disabled onclick="capture()"></button>
+    <button class="g" onclick="logout()">Cancel<small>ரத்து செய்</small></button>
+    <div class="err" id="e-punch"></div>
   </div>
+  <p class="foot">Allow camera and location when asked · கேமரா மற்றும் இருப்பிட அனுமதி வழங்கவும்</p>
+</section>
 
-  <button class="primary" id="sendBtn" onclick="send()">Save test result</button>
-  <div class="out" id="sendOut"></div>
+<!-- 3. Result -->
+<section id="s-result" class="hide">
+  <div class="card result" id="resbox">
+    <div class="big" id="r-icon"></div>
+    <h2 id="r-title"></h2>
+    <div id="r-sub"></div>
+    <div class="muted" id="r-detail" style="margin-top:8px;font-size:14px"></div>
+  </div>
+  <button class="y" onclick="logout()">Done<small>முடிந்தது</small></button>
+  <p class="foot" id="r-auto"></p>
+</section>
+
 </main>
-
 <script>
-  const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
-  const st = { lat:null, lng:null, accuracy:null, gpsError:'', selfie:null, selfieMode:'' };
-  const $ = id => document.getElementById(id);
+const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
+const $ = id => document.getElementById(id);
+let S = {}; let stream = null; let watch = null; let autoTimer = null;
 
-  // GPS: watch for up to 10 s and keep the most accurate reading (same logic the real app will use)
-  function getGps() {
-    if (!navigator.geolocation) { st.gpsError = 'geolocation API missing'; $('gpsOut').innerHTML = '<span class="bad">Location not supported in this page.</span>'; return; }
-    $('gpsBtn').disabled = true; $('gpsOut').textContent = 'Reading GPS…';
-    let best = null;
-    const id = navigator.geolocation.watchPosition(pos => {
-      if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
-      $('gpsOut').textContent = 'Best so far: ±' + Math.round(best.coords.accuracy) + ' m';
-    }, err => {
-      st.gpsError = err.code + ': ' + err.message;
-      $('gpsOut').innerHTML = '<span class="bad">GPS error ' + st.gpsError + '</span>';
-    }, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
-    setTimeout(() => {
-      navigator.geolocation.clearWatch(id); $('gpsBtn').disabled = false;
-      if (!best) { if (!st.gpsError) st.gpsError = 'no fix in 10 s'; $('gpsOut').innerHTML = '<span class="bad">No location: ' + st.gpsError + '</span>'; return; }
-      st.lat = best.coords.latitude; st.lng = best.coords.longitude; st.accuracy = best.coords.accuracy; st.gpsError = '';
-      const d = localDist();
-      $('gpsOut').innerHTML = 'Lat ' + st.lat.toFixed(6) + '\nLng ' + st.lng.toFixed(6) +
-        '\nAccuracy ±' + Math.round(st.accuracy) + ' m' + (d != null ? '\nDistance to store ≈ ' + d + ' m' : '\n(enter store lat/lng to see distance)');
-    }, 10000);
+function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
+function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
+function fmtTime(iso) { return iso ? iso.slice(11, 16) : ''; }
+function fmtDay(iso) { const d = new Date(iso); return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
+
+async function api(body) {
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });   // text/plain → no CORS preflight
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || 'Something went wrong');
+  return j;
+}
+
+async function login() {
+  err('e-login');
+  const id = $('wid').value.replace(/\D/g, ''); const pin = $('pin').value.replace(/\D/g, '');
+  if (!id) return err('e-login', 'Enter your WAFF number · WAFF எண்ணை உள்ளிடவும்');
+  if (pin.length !== 4) return err('e-login', 'PIN must be 4 digits · PIN 4 இலக்கங்கள்');
+  $('b-login').disabled = true;
+  try {
+    const st = await api({ action: 'staffStatus', id, pin });
+    S = { id: st.id, pin, name: st.name, next: st.next, best: null, gpsError: '' };
+    $('hello').textContent = 'Hi ' + st.name.split(' ')[0] + ' 👋';
+    const longAgo = st.next === 'OUT' && (Date.now() - new Date(st.openSince).getTime()) > 14 * 3600000;
+    $('state').innerHTML = st.next === 'OUT'
+      ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>` +
+        (longAgo ? `<br><b style="color:var(--bad)">That was over 14 hours ago. If you forgot to punch out yesterday, tell your manager after this.</b>` : '')
+      : `You are not punched in. Start your shift.<br><span class="muted">பணியைத் தொடங்க வருகையைப் பதிவு செய்யவும்</span>`;
+    $('b-punch').innerHTML = st.next === 'OUT' ? 'Take selfie · Punch OUT<small>செல்ஃபி எடுத்து பணி முடிவு</small>' : 'Take selfie · Punch IN<small>செல்ஃபி எடுத்து பணிக்கு வருகை</small>';
+    show('s-punch'); startGps(); startCam();
+  } catch (e) { err('e-login', e.message); }
+  finally { $('b-login').disabled = false; }
+}
+
+function startGps() {
+  setGps('wait', 'Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது');
+  if (!navigator.geolocation) { S.gpsError = 'not supported'; return setGps('bad', 'Location not supported on this phone'); }
+  watch = navigator.geolocation.watchPosition(p => {
+    if (!S.best || p.coords.accuracy < S.best.accuracy) S.best = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+    setGps(S.best.accuracy <= 50 ? 'ok' : 'wait', `Location found · ±${Math.round(S.best.accuracy)} m` + (S.best.accuracy > 50 ? ' (improving…)' : ''));
+    readyCheck();
+  }, e => {
+    S.gpsError = e.code === 1 ? 'permission denied' : e.message;
+    if (!S.best) setGps('bad', e.code === 1 ? 'Location is blocked — allow it in browser settings · இருப்பிட அனுமதி தேவை' : 'Location error: ' + e.message);
+    readyCheck();
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+}
+function setGps(cls, txt) { $('gdot').className = 'dot ' + cls; $('gtxt').textContent = txt; }
+
+async function startCam() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 } }, audio: false });
+    $('video').srcObject = stream; S.cam = true;
+  } catch (e) {
+    S.cam = false;
+    err('e-punch', 'Camera is blocked (' + e.name + '). Allow camera for this site and reload · கேமரா அனுமதி தேவை');
   }
+  readyCheck();
+}
+function readyCheck() { $('b-punch').disabled = !(S.cam && (S.best || S.gpsError)); }
 
-  function localDist() {
-    const a = parseFloat($('sLat').value), b = parseFloat($('sLng').value);
-    if (isNaN(a) || isNaN(b) || st.lat == null) return null;
-    const R = 6371000, r = Math.PI / 180, dLat = (a - st.lat) * r, dLng = (b - st.lng) * r;
-    const h = Math.sin(dLat/2)**2 + Math.cos(st.lat*r) * Math.cos(a*r) * Math.sin(dLng/2)**2;
-    return Math.round(2 * R * Math.asin(Math.sqrt(h)));
+async function capture() {
+  err('e-punch');
+  const v = $('video'); if (!v.videoWidth) return err('e-punch', 'Camera not ready yet');
+  const W = 480, H = Math.round(v.videoHeight * W / v.videoWidth), c = document.createElement('canvas');
+  c.width = W; c.height = H; const g = c.getContext('2d'); g.translate(W, 0); g.scale(-1, 1); g.drawImage(v, 0, 0, W, H);
+  const selfie = c.toDataURL('image/jpeg', 0.72);
+  $('b-punch').disabled = true; $('b-punch').innerHTML = 'Saving… <small>சேமிக்கப்படுகிறது</small>';
+  stopDevices();
+  try {
+    const r = await api({ action: 'punch', id: S.id, pin: S.pin, selfie, lat: S.best ? S.best.lat : null, lng: S.best ? S.best.lng : null,
+      acc: S.best ? S.best.accuracy : null, gpsError: S.gpsError, ua: navigator.userAgent });
+    showResult(r);
+  } catch (e) {
+    err('e-punch', 'Not saved: ' + e.message + ' · பதிவு ஆகவில்லை — மீண்டும் முயற்சிக்கவும்');
+    $('b-punch').innerHTML = 'Try again<small>மீண்டும் முயற்சி</small>'; $('b-punch').disabled = false; startCam(); startGps();
   }
+}
 
-  // Camera: live preview first (prevents gallery uploads); file-input capture as fallback
-  async function startCam() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:{ ideal:640 } }, audio:false });
-      const v = $('video'); v.srcObject = stream; v.style.display = 'block';
-      $('snapBtn').style.display = 'block'; $('camOut').textContent = 'Live camera OK (mode: live). Tap "Take selfie".';
-      st.selfieMode = 'live';
-    } catch (e) {
-      st.selfieMode = 'blocked: ' + e.name;
-      $('camOut').innerHTML = '<span class="bad">Live camera blocked (' + e.name + '). Check that camera permission is allowed for this site.</span>';
-    }
-  }
+function showResult(r) {
+  const ok = r.status === 'ACCEPTED';
+  $('resbox').className = 'card result ' + (ok ? 'okc' : 'warnc');
+  $('r-icon').textContent = ok ? '✅' : '🕓';
+  $('r-title').textContent = `${r.type === 'IN' ? 'Punch IN' : 'Punch OUT'} · ${fmtTime(r.time)}`;
+  $('r-sub').innerHTML = ok ? 'Recorded · பதிவு செய்யப்பட்டது' : 'Recorded, sent to your manager for review<br>மேலாளர் சரிபார்ப்புக்கு அனுப்பப்பட்டது';
+  $('r-detail').textContent = (r.duplicate ? 'Already recorded a moment ago. ' : '') + (r.store ? r.store + (r.distanceM != null ? ` · ${r.distanceM} m away` : '') : '') + (ok ? '' : (r.reason ? ' · ' + r.reason : ''));
+  show('s-result');
+  let n = 15; $('r-auto').textContent = `Closing in ${n}s`;
+  autoTimer = setInterval(() => { n--; $('r-auto').textContent = `Closing in ${n}s`; if (n <= 0) logout(); }, 1000);
+}
 
-  function snap() {
-    const v = $('video'); compress(v, v.videoWidth, v.videoHeight);
-    v.srcObject.getTracks().forEach(t => t.stop()); v.style.display = 'none'; $('snapBtn').style.display = 'none';
-  }
-
-
-  // Downscale to 480 px wide JPEG — target ~30–60 KB per selfie for Drive storage
-  function compress(src, w, h) {
-    const W = 480, H = Math.round(h * W / w), c = document.createElement('canvas');
-    c.width = W; c.height = H; c.getContext('2d').drawImage(src, 0, 0, W, H);
-    st.selfie = c.toDataURL('image/jpeg', 0.7);
-    $('preview').src = st.selfie; $('preview').style.display = 'block';
-    const kb = Math.round(st.selfie.length * 0.75 / 1024);
-    $('camOut').innerHTML = '<span class="ok">Selfie captured (' + st.selfieMode + ', ~' + kb + ' KB)</span>';
-  }
-
-  function send() {
-    $('sendBtn').disabled = true; $('sendOut').textContent = 'Saving…';
-    const p = {
-      tester: $('tester').value, store: $('store').value, spot: $('spot').value,
-      storeLat: parseFloat($('sLat').value), storeLng: parseFloat($('sLng').value),
-      lat: st.lat, lng: st.lng, accuracy: st.accuracy, gpsError: st.gpsError,
-      selfie: st.selfie, selfieMode: st.selfieMode, ua: navigator.userAgent
-    };
-    fetch(API, { method:'POST', body: JSON.stringify(p) })   // text/plain body = no CORS preflight
-      .then(res => res.json())
-      .then(r => {
-        if (r.error) throw new Error(r.error);
-        $('sendBtn').disabled = false;
-        const cls = r.result === 'ACCEPTED' ? 'ok' : (r.result.startsWith('FLAG') ? 'warn' : 'bad');
-        $('sendOut').innerHTML = 'Saved. Server says: <span class="' + cls + '">' + r.result + '</span>' +
-          (r.distance !== '' ? ' · ' + r.distance + ' m' : '') + (r.selfieKB ? ' · selfie ' + r.selfieKB + ' KB' : '');
-      })
-      .catch(e => { $('sendBtn').disabled = false; $('sendOut').innerHTML = '<span class="bad">Save failed: ' + e.message + '</span>'; });
-  }
+function stopDevices() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; }
+}
+function logout() {
+  stopDevices(); clearInterval(autoTimer); S = {};
+  $('wid').value = ''; $('pin').value = ''; err('e-login'); err('e-punch'); $('video').srcObject = null;
+  show('s-login');
+}
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 </script>
 </body>
 </html>
