@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>BWC Attendance Admin</title>
+<style>
+:root{--yellow:#fff200;--black:#0d0d0d;--teal:#27bdbe;--bg:#f5f5f0;--card:#fff;--ink:#151515;--muted:#6b6b66;--line:#e4e4dc;--chip:#f0f0ea;
+--ok:#1a7f37;--ok-bg:#e6f4ea;--warn:#9a5b00;--warn-bg:#fff4dc;--bad:#b4232b;--bad-bg:#fde8e8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}}
+:root[data-theme="dark"]{--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px}
+button,input,select{font:inherit;color:inherit}
+.top{background:var(--black);color:#fff;display:flex;align-items:center;gap:12px;padding:12px 20px;flex-wrap:wrap}
+.logo{width:34px;height:34px;border-radius:50%;background:var(--yellow);border:3px solid var(--teal);display:grid;place-items:center;font-weight:800;color:#000;font-size:11px;flex:none}
+.top h1{font-size:16px;margin:0;color:var(--yellow)} .top .sub{font-size:12px;color:#bdbdb5}
+.top .sp{flex:1}
+.top input[type=month]{background:#262626;border:1px solid #3a3a3a;border-radius:8px;padding:5px 8px;color:#fff}
+.pill{font-size:12px;padding:5px 10px;border-radius:999px;background:#262626;color:#e8e8e2;border:0;cursor:pointer}
+.pill b{color:var(--yellow)}
+nav{display:flex;gap:2px;padding:0 20px;background:var(--black);overflow-x:auto;border-top:1px solid #222}
+nav button{background:none;border:0;color:#cfcfc8;padding:11px 13px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;font-weight:500}
+nav button.on{color:#fff;border-bottom-color:var(--yellow)}
+nav .n{background:var(--yellow);color:#000;border-radius:999px;padding:0 6px;font-size:11px;margin-left:6px;font-weight:700}
+main{max-width:1280px;margin:0 auto;padding:20px}
+.grid{display:grid;gap:14px}.grid>*{min-width:0}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.two{grid-template-columns:1.4fr 1fr}@media(max-width:900px){.two{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.kpi .l{color:var(--muted);font-size:12px;font-weight:500}.kpi .v{font-size:26px;font-weight:800;margin-top:4px}.kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
+.kpi.accent{border-left:5px solid var(--teal)}
+h2{font-size:15px;margin:0 0 12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--card);z-index:1}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--chip)} tr.click{cursor:pointer}
+.scroll{overflow:auto;max-height:68vh}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}.t-bad{background:var(--bad-bg);color:var(--bad)}.t-mute{background:var(--chip);color:var(--muted)}
+input[type=text],input[type=number],input[type=password],input[type=datetime-local],input[type=date],select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0;width:100%}
+input.mini{width:58px;text-align:right;padding:3px 6px}
+.btn{border:0;border-radius:9px;padding:8px 14px;font-weight:600;cursor:pointer;background:var(--chip);white-space:nowrap}
+.btn.y{background:var(--yellow);color:#000}.btn.t{background:var(--teal);color:#fff}.btn.r{background:var(--bad-bg);color:var(--bad)}.btn.g{background:var(--ok-bg);color:var(--ok)}
+.btn:disabled{opacity:.5}
+.muted{color:var(--muted)}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:14px;line-height:1.45}
+.drawer{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:50}.drawer.on{display:block}
+.panel{position:absolute;right:0;top:0;bottom:0;width:min(540px,100%);background:var(--card);padding:20px;overflow:auto}
+.steps{display:grid;gap:8px;margin-top:10px}
+.step{display:grid;grid-template-columns:1fr auto;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.step .f{font-size:12px;color:var(--muted);margin-top:2px}.step.total{border:2px solid var(--teal)}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
+.form label{font-size:12px;color:var(--muted);display:grid;gap:4px}
+.flag{display:grid;grid-template-columns:110px 1fr;gap:14px}
+.selfie{width:110px;height:140px;border-radius:10px;background:var(--chip);display:grid;place-items:center;color:var(--muted);font-size:11px;text-align:center;overflow:hidden;cursor:pointer}
+.selfie img{width:100%;height:100%;object-fit:cover}
+.bar{height:8px;background:var(--chip);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--teal)}
+#login{max-width:380px;margin:60px auto}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--black);color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:99;max-width:90vw}
+.loading{opacity:.5;pointer-events:none}
+.pins td{font-size:15px}
+@media print{.top,nav,.noprint{display:none!important}main{padding:0}.card{border:0}}
+@media(max-width:640px){main{padding:14px}.top{padding:10px 14px}nav{padding:0 6px}.kpi .v{font-size:22px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="drawer" id="drawer" onclick="if(event.target===this)closeDrawer()"><div class="panel" id="panel"></div></div>
+<div id="toast"></div>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
+// BWC payroll engine — shared by the admin dashboard. Rules match BWC_Payroll_June2026_MASTER_V9
+// (verified: 60/62 employees identical on June 2026 data; the 2 gaps are a ₹5 rounding tie and a rate error in V9).
+const COUNTED = ['ACCEPTED', 'APPROVED', 'MANUAL'];
+const MAX_SHIFT_MS = 24 * 3600000;   // must match OPEN_SHIFT_MAX_H in Code.gs
+const LONG_SHIFT_H = 20;
+
+function istParts(iso) { return { date: iso.slice(0, 10), time: iso.slice(11, 16) }; }
+
+// Pair punches into shifts for one employee. Returns {shifts, issues}.
+function buildShifts(punches, now) {
+  now = now || Date.now();
+  const ps = punches.filter(p => COUNTED.includes(p.status)).sort((a, b) => Number(a.epoch) - Number(b.epoch));
+  const shifts = [], issues = []; let open = null;
+  for (const p of ps) {
+    if (p.type === 'IN') {
+      if (open) issues.push({ kind: 'Missing OUT', punch: open });
+      open = p;
+    } else {
+      if (open && Number(p.epoch) - Number(open.epoch) <= MAX_SHIFT_MS) {
+        const i = istParts(open.time), o = istParts(p.time);
+        shifts.push({ date: i.date, day: Number(i.date.slice(8, 10)), in: i.time, out: o.time + (o.date !== i.date ? ' +1' : ''),
+          hours: (Number(p.epoch) - Number(open.epoch)) / 3600000, store: open.store, inPunch: open, outPunch: p });
+        if ((Number(p.epoch) - Number(open.epoch)) / 3600000 > LONG_SHIFT_H) issues.push({ kind: 'Very long shift — check', punch: open, counted: true });
+        open = null;
+      } else issues.push({ kind: 'OUT without IN', punch: p });
+    }
+  }
+  if (open) issues.push({ kind: now - Number(open.epoch) > MAX_SHIFT_MS ? 'Missing OUT' : 'On shift now', punch: open });
+  return { shifts, issues };
+}
+
+function daysInMonth(month) { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+
+// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
+function calcPay(e, shifts, ctx) {
+  const cfg = ctx.cfg, calDays = daysInMonth(ctx.month), workDays = calDays - Number(cfg.weekOffsPerMonth || 4);
+  const duty = Number(e.duty) || 9, plan = Number(e.plan) || 0;
+  const workH = shifts.reduce((s, x) => s + x.hours, 0);
+  const halfDays = shifts.filter(x => x.hours < Number(cfg.halfDayHrs || 4)).length;
+  const days = shifts.length - 0.5 * halfDays;
+  const rate = plan / (calDays * duty);
+  const eligible = e.payType === 'HOURLY' && e.woEligible !== 'No' && e.status === 'Active';
+  const wo = (ctx.weekOff || []).find(w => w.empId === e.id);
+  const autoCredit = Math.min(Number(cfg.weekOffsPerMonth || 4), Math.floor(days / 6));
+  const creditDays = eligible ? (wo ? Number(wo.days) : autoCredit) : 0;
+  const creditSource = !eligible ? '' : (wo ? 'set by ' + wo.setBy : 'auto');
+  const creditH = creditDays * duty;
+  const active = e.status === 'Active';
+  let base = 0, basis;
+  if (!active) basis = 'Inactive — not paid';
+  else if (e.payType === 'FIXED') { base = plan * Math.min(days, workDays) / workDays; basis = `₹${inr(plan)} × min(${days}, ${workDays}) ÷ ${workDays}`; }
+  else { base = (workH + creditH) * rate; basis = `(${workH.toFixed(2)} h + ${creditH} h week-off) × ₹${rate.toFixed(2)}/h`; }
+  const ded = (ctx.ded || []).filter(x => x.empId === e.id), add = (ctx.add || []).filter(x => x.empId === e.id);
+  const dedT = ded.reduce((s, x) => s + Number(x.amount), 0), addT = add.reduce((s, x) => s + Number(x.amount), 0);
+  const net = active ? Math.round((base - dedT + addT) / 10) * 10 : 0;
+  return { workH, days, halfDays, calDays, workDays, rate, creditDays, creditSource, creditH, eligible, base, basis, ded, add, dedT, addT, net };
+}
+function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
+
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rs = n => (n < 0 ? '−₹' : '₹') + Math.abs(Math.round(n)).toLocaleString('en-IN');
+const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } };
+const CATS_D = ['COMPLAINT', 'UNI/HYG/TRNG', 'DISCIPLINE', 'ADVANCE', 'T-SHIRT/EQUIP', 'CASH SHORT', 'OTHER'];
+const CATS_A = ['BONUS', 'INCENTIVE', 'Accident Coverage', 'ARREARS', 'OTHER'];
+const nowMonth = () => new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 7);
+let ST = { token: store('bwc_tok'), month: store('bwc_month') || nowMonth(), tab: 'overview', day: null, branch: 'ALL', D: null, selfies: {} };
+
+async function api(body, quiet) {
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ token: ST.token }, body)) });
+  const j = await r.json();
+  if (!j.ok) {
+    if (j.error === 'SESSION_EXPIRED') { ST.token = null; store('bwc_tok', null); renderLogin('Session expired — sign in again'); throw new Error('Session expired'); }
+    throw new Error(j.error || 'Request failed');
+  }
+  return j;
+}
+function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.style.background = bad ? 'var(--bad)' : 'var(--black)'; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 3500); }
+async function act(body, okMsg) { try { const r = await api(body); if (okMsg) toast(okMsg); await load(); return r; } catch (e) { toast(e.message, true); throw e; } }
+
+/* ---------------- LOGIN ---------------- */
+function renderLogin(msg) {
+  $('#app').innerHTML = `<div id="login" class="card">
+    <div class="row" style="margin-bottom:14px"><div class="logo">BWC</div><div><b>The Belgian Waffle Cafe</b><div class="muted">Attendance &amp; payroll admin</div></div></div>
+    <label class="muted">User name<input type="text" id="lu" autocomplete="username"></label><br>
+    <label class="muted">Password<input type="password" id="lp" autocomplete="current-password"></label>
+    <button class="btn y" style="width:100%;margin-top:14px;padding:11px" id="lb" onclick="doLogin()">Sign in</button>
+    <p class="muted" id="lm" style="min-height:18px">${esc(msg || '')}</p></div>`;
+  $('#lp').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
+async function doLogin() {
+  $('#lb').disabled = true; $('#lm').textContent = 'Signing in…';
+  try {
+    const r = await fetch(API, { method: 'POST', body: JSON.stringify({ action: 'login', user: $('#lu').value, password: $('#lp').value }) }).then(r => r.json());
+    if (!r.ok) throw new Error(r.error);
+    ST.token = r.token; store('bwc_tok', r.token); await load();
+  } catch (e) { $('#lm').textContent = e.message; $('#lb').disabled = false; }
+}
+function logout() { api({ action: 'logout' }).catch(() => {}); ST.token = null; store('bwc_tok', null); renderLogin('Signed out'); }
+
+/* ---------------- DATA ---------------- */
+async function load() {
+  document.body.classList.add('loading');
+  try {
+    const D = await api({ action: 'bootstrap', month: ST.month });
+    ST.D = D; derive(); render();
+  } finally { document.body.classList.remove('loading'); }
+}
+function derive() {
+  const D = ST.D;
+  D.emp = Object.fromEntries(D.employees.map(e => [e.id, e]));
+  D.storeName = Object.fromEntries(D.stores.map(s => [s.code, s.name])); D.storeName.MGR = 'Managers (roaming)';
+  D.byEmp = {}; D.issues = [];
+  D.employees.forEach(e => {
+    const b = buildShifts(D.punches.filter(p => p.empId === e.id));
+    b.inMonth = b.shifts.filter(s => s.date.slice(0, 7) === D.month);
+    D.byEmp[e.id] = b;
+    b.issues.forEach(i => D.issues.push(Object.assign({ emp: e }, i)));
+  });
+  D.flagged = D.punches.filter(p => p.status === 'FLAGGED').sort((a, b) => Number(b.epoch) - Number(a.epoch));
+  D.pay = D.employees.map(e => ({ e, r: calcPay(e, D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }) }));
+  const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+  if (!ST.day || ST.day.slice(0, 7) !== D.month) ST.day = today.slice(0, 7) === D.month ? today : D.month + '-01';
+}
+const branchName = c => (ST.D.storeName[c] || c);
+
+/* ---------------- SHELL ---------------- */
+function render() {
+  const D = ST.D, isAdmin = D.role === 'admin';
+  const tabs = [['overview', 'Overview'], ['daily', 'Daily attendance'], ['flags', 'Review', D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length],
+    ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll']];
+  if (isAdmin) tabs.push(['stores', 'Stores'], ['users', 'Users']);
+  $('#app').innerHTML = `
+  <div class="top"><div class="logo">BWC</div><div><h1>The Belgian Waffle Cafe</h1><div class="sub">Attendance &amp; payroll admin</div></div><div class="sp"></div>
+    <input type="month" value="${D.month}" onchange="ST.month=this.value;store('bwc_month',this.value);load()" title="Payroll month">
+    <button class="pill" onclick="pwDialog()"><b>${esc(D.user)}</b> · ${D.role}</button><button class="pill" onclick="logout()">Sign out</button></div>
+  <nav>${tabs.map(([k, l, n]) => `<button class="${ST.tab === k ? 'on' : ''}" onclick="go('${k}')">${l}${n ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</nav>
+  <main id="main"></main>`;
+  ({ overview, daily, flags, emps, regs, pay, stores, users })[ST.tab]();
+}
+function go(t) { ST.tab = t; render(); window.scrollTo(0, 0); }
+function closeDrawer() { $('#drawer').classList.remove('on'); }
+function openDrawer(html) { $('#panel').innerHTML = html; $('#drawer').classList.add('on'); }
+const branchSelect = (v, on) => `<select onchange="${on}"><option value="ALL">All branches</option>${branchCodes().map(c => `<option value="${c}" ${c === v ? 'selected' : ''}>${esc(branchName(c))}</option>`).join('')}</select>`;
+function branchCodes() { return [...new Set(ST.D.employees.map(e => e.branch))].sort((a, b) => branchName(a).localeCompare(branchName(b))); }
+
+/* ---------------- OVERVIEW ---------------- */
+function overview() {
+  const D = ST.D, act = D.employees.filter(e => e.status === 'Active');
+  const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+  const onShift = D.issues.filter(i => i.kind === 'On shift now');
+  const todayShifts = act.filter(e => D.byEmp[e.id].shifts.some(s => s.date === today) || onShift.some(i => i.emp.id === e.id && i.punch.time.slice(0, 10) === today));
+  const net = D.pay.reduce((s, x) => s + x.r.net, 0);
+  const noStore = D.stores.filter(s => s.active === 'Yes' && (s.lat === '' || s.lng === ''));
+  const noPin = act.filter(e => !e.hasPin);
+  const byB = branchCodes().map(b => { const rows = D.pay.filter(x => x.e.branch === b);
+    return { b, act: rows.filter(x => x.e.status === 'Active').length, on: onShift.filter(i => i.emp.branch === b).length, hrs: rows.reduce((s, x) => s + x.r.workH, 0), cost: rows.reduce((s, x) => s + x.r.net, 0) }; });
+  const maxC = Math.max(1, ...byB.map(x => x.cost));
+  $('#main').innerHTML = `
+  ${noStore.length ? `<div class="note"><b>${noStore.length} store(s) have no location yet</b> — every punch there is flagged until it's set: ${noStore.map(s => esc(s.name)).join(', ')}. ${D.role === 'admin' ? '<a href="#" onclick="go(\'stores\');return false">Set locations →</a>' : 'Ask an admin to set them.'}</div>` : ''}
+  ${noPin.length ? `<div class="note"><b>${noPin.length} active employee(s) have no PIN</b> and can't punch yet. <a href="#" onclick="go('emps');return false">Issue PINs →</a></div>` : ''}
+  <div class="grid kpis">
+    <div class="card kpi accent"><div class="l">On shift right now</div><div class="v">${onShift.length}</div><div class="s">punched IN, not yet OUT</div></div>
+    <div class="card kpi"><div class="l">Worked today</div><div class="v">${todayShifts.length}</div><div class="s">of ${act.length} active employees</div></div>
+    <div class="card kpi"><div class="l">To review</div><div class="v">${D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length}</div><div class="s">${D.flagged.length} flagged punches · ${D.issues.filter(i => i.kind === 'Missing OUT').length} missing OUT</div></div>
+    <div class="card kpi"><div class="l">Payroll NET so far · ${esc(D.monthLabel)}</div><div class="v">${rs(net)}</div><div class="s">from approved shifts</div></div>
+  </div>
+  <div class="grid two" style="margin-top:14px">
+    <div class="card"><h2>By branch · ${esc(D.monthLabel)}</h2><div class="scroll"><table>
+      <thead><tr><th>Branch</th><th class="num">Active</th><th class="num">On shift</th><th class="num">Hours</th><th class="num">NET</th><th style="width:26%"></th></tr></thead>
+      <tbody>${byB.map(x => `<tr class="click" onclick="ST.branch='${x.b}';go('pay')"><td><b>${esc(branchName(x.b))}</b></td><td class="num">${x.act}</td><td class="num">${x.on}</td><td class="num">${Math.round(x.hrs)}</td><td class="num">${rs(x.cost)}</td><td><div class="bar"><i style="width:${(x.cost / maxC * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card"><h2>On shift now</h2>${onShift.length ? `<table><tbody>${onShift.sort((a, b) => a.punch.epoch - b.punch.epoch).map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td>${esc(branchName(i.punch.store))}</td><td class="num">since ${i.punch.time.slice(11, 16)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Nobody is punched in right now.</p>'}
+      <h2 style="margin-top:18px">Salary rules</h2>
+      <ol class="muted" style="padding-left:18px;line-height:1.6;margin:0">
+        <li>A shift under ${D.config.halfDayHrs} h counts as ½ day.</li>
+        <li>FIXED: planned × min(days, working days) ÷ working days (working days = days in month − ${D.config.weekOffsPerMonth}).</li>
+        <li>HOURLY: (hours + paid week-off hours) × planned ÷ (days in month × duty hrs).</li>
+        <li>Week-off days: <b>auto = 1 per 6 days worked, max ${D.config.weekOffsPerMonth}</b> until set by hand in Payroll — provisional rule.</li>
+        <li>NET rounded to ₹10. Only APPROVED / ACCEPTED / MANUAL punches count.</li></ol></div>
+  </div>`;
+}
+
+/* ---------------- DAILY ---------------- */
+function daily() {
+  const D = ST.D, b = ST.branch, day = ST.day;
+  const list = D.employees.filter(e => (e.status === 'Active' || D.byEmp[e.id].shifts.length) && (b === 'ALL' || e.branch === b));
+  const rows = list.map(e => ({ e, s: D.byEmp[e.id].shifts.filter(x => x.date === day), open: D.byEmp[e.id].issues.filter(i => i.punch.time.slice(0, 10) === day) }));
+  const pending = D.punches.filter(p => p.status === 'FLAGGED' && p.time.slice(0, 10) === day);
+  $('#main').innerHTML = `<div class="card">
+    <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Daily attendance</h2><div class="sp"></div>
+      <input type="date" style="width:auto" value="${day}" min="${D.month}-01" max="${D.month}-${String(daysInMonth(D.month)).padStart(2, '0')}" onchange="ST.day=this.value;render()">
+      <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div></div>
+    <p class="muted">${rows.filter(r => r.s.length || r.open.length).length} worked · ${pending.length} punch(es) waiting for review that day are not counted yet. Tap a selfie to load it.</p>
+    <div class="scroll"><table><thead><tr><th>Employee</th><th>Store</th><th>IN</th><th>OUT</th><th class="num">Hours</th><th>Status</th><th>Selfie IN</th><th>Selfie OUT</th></tr></thead><tbody>
+    ${rows.sort((x, y) => (y.s.length + y.open.length) - (x.s.length + x.open.length) || x.e.branch.localeCompare(y.e.branch)).map(({ e, s, open }) => {
+      const name = `<td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td>`;
+      if (s.length) return s.map(x => `<tr>${name}<td>${esc(branchName(x.store))}</td><td>${x.in}</td><td>${x.out}</td><td class="num">${x.hours.toFixed(2)}</td><td>${x.hours < D.config.halfDayHrs ? '<span class="tag t-warn">Half day</span>' : '<span class="tag t-ok">Present</span>'} ${[x.inPunch, x.outPunch].some(p => p.status === 'MANUAL') ? '<span class="tag t-mute">manual</span>' : ''}</td><td>${selfieBtn(x.inPunch)}</td><td>${selfieBtn(x.outPunch)}</td></tr>`).join('');
+      if (open.length) return open.map(i => `<tr>${name}<td>${esc(branchName(i.punch.store))}</td><td>${i.punch.type === 'IN' ? i.punch.time.slice(11, 16) : '—'}</td><td>${i.punch.type === 'OUT' ? i.punch.time.slice(11, 16) : '—'}</td><td class="num muted">—</td><td><span class="tag ${i.kind === 'On shift now' ? 't-ok' : 't-bad'}">${i.kind}</span></td><td>${selfieBtn(i.punch)}</td><td></td></tr>`).join('');
+      return `<tr>${name}<td>${esc(branchName(e.branch))}</td><td class="muted">—</td><td class="muted">—</td><td class="num muted">—</td><td><span class="tag t-mute">No punch</span></td><td></td><td></td></tr>`;
+    }).join('')}</tbody></table></div></div>`;
+}
+function selfieBtn(p) { return p && p.selfieId ? `<button class="btn" style="padding:3px 9px" onclick="viewSelfie('${p.selfieId}','${esc(D_name(p))}')">View</button>` : '<span class="muted">—</span>'; }
+function D_name(p) { const e = ST.D.emp[p.empId]; return (e ? e.name : p.empId) + ' · ' + p.type + ' ' + p.time.slice(0, 16).replace('T', ' '); }
+async function loadSelfie(id) {
+  if (ST.selfies[id]) return ST.selfies[id];
+  const r = await api({ action: 'getSelfie', selfieId: id }); ST.selfies[id] = r.dataUrl; return r.dataUrl;
+}
+async function viewSelfie(id, title) {
+  openDrawer(`<div class="row"><h2 style="margin:0">${esc(title)}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div><p class="muted">Loading selfie…</p>`);
+  try { const u = await loadSelfie(id); $('#panel p').outerHTML = `<img src="${u}" style="width:100%;border-radius:12px;margin-top:12px">`; } catch (e) { $('#panel p').textContent = e.message; }
+}
+
+/* ---------------- REVIEW ---------------- */
+function flags() {
+  const D = ST.D;
+  const issues = D.issues.filter(i => i.kind !== 'On shift now');
+  $('#main').innerHTML = `
+  <div class="card"><h2>Flagged punches (${D.flagged.length})</h2>
+    <p class="muted" style="margin-top:-6px">Not counted in pay until approved. Approve if the selfie is the right person and they were really at work.</p>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(340px,1fr))">
+    ${D.flagged.map(p => { const e = D.emp[p.empId] || { name: p.name };
+      return `<div class="card"><div class="flag">
+        <div class="selfie" id="sf_${p.punchId}" onclick="thumb('${p.punchId}','${p.selfieId}')">${p.selfieId ? 'Tap to load selfie' : 'No selfie'}</div>
+        <div><div class="row"><b>${esc(e.name)}</b><span class="muted">${p.empId}</span></div>
+          <div class="muted" style="margin-top:4px">${p.type} · ${p.time.slice(0, 16).replace('T', ' ')}</div>
+          <div style="margin-top:6px"><span class="tag t-warn">${esc(p.reason)}</span></div>
+          <div class="muted" style="margin-top:6px">Nearest: ${esc(branchName(p.store))}${p.distanceM !== '' ? ' · ' + p.distanceM + ' m' : ''}${p.accuracyM !== '' ? ' · GPS ±' + p.accuracyM + ' m' : ''}</div>
+          ${p.lat !== '' ? `<div style="margin-top:4px"><a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener">Open in Maps</a></div>` : ''}
+          <div class="row" style="margin-top:10px"><button class="btn g" onclick="review('${p.punchId}','approve')">Approve</button><button class="btn r" onclick="review('${p.punchId}','reject')">Reject</button></div>
+        </div></div></div>`; }).join('') || '<p class="muted">Nothing to review. 🎉</p>'}
+    </div></div>
+  <div class="card" style="margin-top:14px"><h2>Missing OUT / broken shifts (${issues.length})</h2>
+    <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts.</p>
+    <table><thead><tr><th>Employee</th><th>Problem</th><th>Punch</th><th>Store</th><th></th></tr></thead><tbody>
+    ${issues.map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${i.punch.time.slice(0, 16).replace('T', ' ')}</td><td>${esc(branchName(i.punch.store))}</td>
+      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">None</td></tr>'}
+    </tbody></table>
+    <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
+}
+async function thumb(pid, sid) { if (!sid) return; const el = $('#sf_' + pid); el.textContent = 'Loading…'; try { el.innerHTML = `<img src="${await loadSelfie(sid)}">`; } catch (e) { el.textContent = e.message; } }
+function review(id, d) { act({ action: 'reviewPunch', punchId: id, decision: d }, d === 'approve' ? 'Approved' : 'Rejected'); }
+function manualDialog(empId, type, ref) {
+  const D = ST.D; const base = ref ? ref.slice(0, 11) + (type === 'OUT' ? '' : '') : ST.day + 'T';
+  const def = ref ? (type === 'OUT' ? new Date(new Date(ref).getTime() + 9 * 3600000) : new Date(ref)) : null;
+  const local = def ? new Date(def.getTime() + 5.5 * 3600000).toISOString().slice(0, 16) : ST.day + 'T09:00';
+  openDrawer(`<div class="row"><h2 style="margin:0">Add manual punch</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="form" style="margin-top:14px">
+      <label>Employee<select id="m_emp">${D.employees.map(e => `<option value="${e.id}" ${e.id === empId ? 'selected' : ''}>${e.id} · ${esc(e.name)}</option>`).join('')}</select></label>
+      <label>Type<select id="m_type"><option ${type === 'IN' ? 'selected' : ''}>IN</option><option ${type === 'OUT' ? 'selected' : ''}>OUT</option></select></label>
+      <label>Date &amp; time (IST)<input type="datetime-local" id="m_time" value="${local}"></label>
+      <label>Store<select id="m_store">${D.stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('')}</select></label>
+      <label style="grid-column:1/-1">Reason (required)<input type="text" id="m_note" placeholder="e.g. Forgot to punch out — confirmed by store manager"></label></div>
+    <p class="muted">Manual punches count in pay immediately and are written to the audit log with your name.</p>
+    <button class="btn y" onclick="saveManual()">Save punch</button>`);
+  const e = ST.D.emp[empId]; if (e && D.stores.some(s => s.code === e.branch)) $('#m_store').value = e.branch;
+}
+async function saveManual() {
+  const t = $('#m_time').value; if (!t) return toast('Pick a time', true);
+  await act({ action: 'addManualPunch', empId: $('#m_emp').value, type: $('#m_type').value, time: t + ':00+05:30', store: $('#m_store').value, note: $('#m_note').value }, 'Punch added');
+  closeDrawer();
+}
+
+/* ---------------- EMPLOYEES ---------------- */
+function emps() {
+  const D = ST.D, b = ST.branch;
+  const list = D.employees.filter(e => b === 'ALL' || e.branch === b);
+  $('#main').innerHTML = `<div class="card">
+    <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Employees (${list.length})</h2><div class="sp"></div>
+      <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
+      ${D.role === 'admin' ? `<button class="btn t" onclick="bulkPins()">Issue PINs to everyone without one</button>` : ''}
+      <button class="btn y" onclick="editEmp(null)">+ Add employee</button></div>
+    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Pay type</th><th class="num">Planned</th><th class="num">Duty h</th><th>Week-off paid</th><th>PIN</th><th>Status</th><th></th></tr></thead><tbody>
+    ${list.map(e => `<tr><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${e.roaming === 'Yes' ? ' <span class="tag t-mute">any store</span>' : ''}</td><td>${e.payType}</td><td class="num">${rs(e.plan)}</td><td class="num">${e.duty}</td><td>${e.woEligible}</td>
+      <td>${e.hasPin ? '<span class="tag t-ok">Set</span>' : '<span class="tag t-bad">None</span>'}</td><td>${e.status === 'Active' ? '<span class="tag t-ok">Active</span>' : '<span class="tag t-mute">Inactive</span>'}</td>
+      <td><button class="btn" onclick="editEmp('${e.id}')">Edit</button> <button class="btn" onclick="resetPin('${e.id}')">${e.hasPin ? 'Reset PIN' : 'Issue PIN'}</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function editEmp(id) {
+  const D = ST.D; const nextId = 'WAFF-' + String(Math.max(...D.employees.map(e => Number(e.id.slice(5)) || 0)) + 1).padStart(3, '0');
+  const e = id ? D.emp[id] : { id: nextId, name: '', branch: D.stores[0].code, payType: 'HOURLY', plan: 15000, duty: 9, status: 'Active', woEligible: 'Yes', roaming: 'No' };
+  const codes = D.stores.map(s => s.code).concat(['MGR']);
+  openDrawer(`<div class="row"><h2 style="margin:0">${id ? 'Edit ' + esc(e.name) : 'Add employee'}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="form" style="margin-top:14px">
+      <label>WAFF ID<input type="text" id="f_id" value="${e.id}" ${id ? 'disabled' : ''}></label>
+      <label>Name<input type="text" id="f_name" value="${esc(e.name)}"></label>
+      <label>Branch<select id="f_branch">${codes.map(c => `<option value="${c}" ${c === e.branch ? 'selected' : ''}>${esc(branchName(c))}</option>`).join('')}</select></label>
+      <label>Can punch at any store<select id="f_roam"><option ${e.roaming !== 'Yes' ? 'selected' : ''}>No</option><option ${e.roaming === 'Yes' ? 'selected' : ''}>Yes</option></select></label>
+      <label>Pay type<select id="f_type"><option ${e.payType === 'HOURLY' ? 'selected' : ''}>HOURLY</option><option ${e.payType === 'FIXED' ? 'selected' : ''}>FIXED</option></select></label>
+      <label>Planned salary (₹)<input type="number" id="f_plan" value="${e.plan}"></label>
+      <label>Duty hours / shift<input type="number" id="f_duty" value="${e.duty}"></label>
+      <label>Week-off paid<select id="f_wo"><option ${e.woEligible !== 'No' ? 'selected' : ''}>Yes</option><option ${e.woEligible === 'No' ? 'selected' : ''}>No</option></select></label>
+      <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
+    </div><p class="muted">Every change is written to the Audit sheet (who, when, old → new).</p>
+    <button class="btn y" onclick="saveEmp(${id ? 'false' : 'true'})">Save</button>`);
+}
+async function saveEmp(isNew) {
+  await act({ action: 'saveEmployee', isNew, employee: { id: $('#f_id').value, name: $('#f_name').value, branch: $('#f_branch').value, roaming: $('#f_roam').value,
+    payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, status: $('#f_status').value } }, 'Saved');
+  closeDrawer();
+}
+async function resetPin(id) {
+  const e = ST.D.emp[id];
+  if (e.hasPin && !confirmInline(`Reset PIN for ${e.name}? Their old PIN stops working.`)) return;
+  const r = await act({ action: 'resetPin', id }, '');
+  pinSheet([{ id: r.id, name: r.name, branch: e.branch, pin: r.pin }], 'New PIN');
+}
+function confirmInline(msg) { return window.confirm(msg); }
+async function bulkPins() {
+  const r = await act({ action: 'bulkPins' }, '');
+  if (!r.pins.length) return toast('Everyone active already has a PIN');
+  pinSheet(r.pins, r.pins.length + ' new PINs');
+}
+function pinSheet(list, title) {
+  openDrawer(`<div class="row noprint"><h2 style="margin:0">${title}</h2><div class="sp"></div><button class="btn t" onclick="window.print()">Print</button><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="note" style="margin-top:12px">Shown <b>once only</b> — PINs are stored scrambled and can't be viewed again. Hand each slip to the employee privately.</div>
+    <table class="pins"><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>PIN</th></tr></thead><tbody>
+    ${list.map(p => `<tr><td>${p.id}</td><td>${esc(p.name)}</td><td>${esc(branchName(p.branch))}</td><td><b style="font-size:20px;letter-spacing:.15em">${p.pin}</b></td></tr>`).join('')}</tbody></table>
+    <p class="muted">Staff app: <b>heavencrescita.github.io/attendance</b></p>`);
+}
+
+/* ---------------- REGISTERS ---------------- */
+function regs() {
+  const D = ST.D;
+  const all = D.deductions.map(x => Object.assign({ kind: 'deduction' }, x)).concat(D.additions.map(x => Object.assign({ kind: 'addition' }, x)))
+    .sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
+  $('#main').innerHTML = `<div class="card"><h2>Add for ${esc(D.monthLabel)}</h2>
+    <div class="form">
+      <label>Type<select id="r_kind" onchange="$('#r_cat').innerHTML=(this.value==='deduction'?CATS_D:CATS_A).map(c=>'<option>'+c+'</option>').join('')"><option value="deduction">Deduction</option><option value="addition">Addition</option></select></label>
+      <label>Employee<select id="r_emp">${D.employees.filter(e => e.status === 'Active').map(e => `<option value="${e.id}">${e.id} · ${esc(e.name)}</option>`).join('')}</select></label>
+      <label>Category<select id="r_cat">${CATS_D.map(c => `<option>${c}</option>`).join('')}</select></label>
+      <label>Amount (₹)<input type="number" id="r_amt" min="1"></label>
+      <label style="grid-column:span 2">Note<input type="text" id="r_note" placeholder="Reason / reference"></label>
+      <button class="btn y" onclick="addReg()">Add</button></div>
+    <p class="muted" style="margin:10px 0 0">Entries apply to the month selected at the top (${esc(D.monthLabel)}). Switch month to add for another month.</p></div>
+  <div class="card" style="margin-top:14px"><h2>${esc(D.monthLabel)} · ${all.length} entries · deductions ${rs(D.deductions.reduce((s, x) => s + Number(x.amount), 0))} · additions ${rs(D.additions.reduce((s, x) => s + Number(x.amount), 0))}</h2>
+    <div class="scroll"><table><thead><tr><th>Type</th><th>WAFF ID</th><th>Name</th><th>Category</th><th class="num">Amount</th><th>Note</th><th>Added by</th><th></th></tr></thead><tbody>
+    ${all.map(x => `<tr><td>${x.kind === 'deduction' ? '<span class="tag t-bad">Deduction</span>' : '<span class="tag t-ok">Addition</span>'}</td><td>${x.empId}</td><td>${esc((D.emp[x.empId] || {}).name)}</td><td>${esc(x.category)}</td><td class="num">${rs(x.amount)}</td><td class="muted">${esc(x.note)}</td><td class="muted">${esc(x.addedBy)} · ${String(x.addedAt).slice(0, 10)}</td><td><button class="btn" onclick="delReg('${x.kind}','${x.rowId}')">Remove</button></td></tr>`).join('') || '<tr><td colspan="8" class="muted">No entries for this month.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+function addReg() {
+  const amt = Number($('#r_amt').value); if (!(amt > 0)) return toast('Enter an amount', true);
+  act({ action: 'addReg', kind: $('#r_kind').value, empId: $('#r_emp').value, category: $('#r_cat').value, amount: amt, note: $('#r_note').value, month: ST.D.month }, 'Added');
+}
+function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ action: 'delReg', kind, rowId }, 'Removed'); }
+
+/* ---------------- PAYROLL ---------------- */
+function pay() {
+  const D = ST.D, b = ST.branch;
+  const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0));
+  const sum = k => R.reduce((s, x) => s + x.r[k], 0);
+  const missing = D.issues.filter(i => i.kind === 'Missing OUT').length;
+  $('#main').innerHTML = `
+  ${missing || D.flagged.length ? `<div class="note">${D.flagged.length} flagged punch(es) and ${missing} missing OUT(s) are <b>not</b> in these numbers yet. <a href="#" onclick="go('flags');return false">Review →</a></div>` : ''}
+  <div class="grid kpis">
+    <div class="card kpi accent"><div class="l">NET payable · ${b === 'ALL' ? 'all branches' : esc(branchName(b))}</div><div class="v">${rs(sum('net'))}</div><div class="s">${esc(D.monthLabel)}</div></div>
+    <div class="card kpi"><div class="l">Base pay</div><div class="v">${rs(sum('base'))}</div></div>
+    <div class="card kpi"><div class="l">Deductions</div><div class="v">${rs(sum('dedT'))}</div></div>
+    <div class="card kpi"><div class="l">Additions</div><div class="v">${rs(sum('addT'))}</div></div></div>
+  <div class="card" style="margin-top:14px">
+    <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Payroll · ${esc(D.monthLabel)}</h2><div class="sp"></div>
+      <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
+      <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button></div>
+    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th><th>Notes</th></tr></thead><tbody>
+    ${R.map(({ e, r }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}</td><td>${e.payType}</td>
+      <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
+      <td class="num">${r.eligible ? `<input class="mini" type="number" min="0" max="8" value="${r.creditDays}" onchange="setWO('${e.id}',this.value)" title="${r.creditSource}"> ${r.creditSource === 'auto' ? '<span class="tag t-mute">auto</span>' : ''}` : '<span class="muted">—</span>'}</td>
+      <td class="num">${rs(r.base)}</td><td class="num">${r.dedT ? rs(r.dedT) : '<span class="muted">—</span>'}</td><td class="num">${r.addT ? rs(r.addT) : '<span class="muted">—</span>'}</td>
+      <td class="num"><b style="${r.net < 0 ? 'color:var(--bad)' : ''}">${rs(r.net)}</b></td>
+      <td>${e.status !== 'Active' && r.days ? '<span class="tag t-bad">Inactive but worked</span>' : ''}${r.net < 0 ? '<span class="tag t-bad">Negative</span>' : ''}${!e.hasPin && e.status === 'Active' ? '<span class="tag t-mute">no PIN</span>' : ''}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
+function setWO(id, v) { act({ action: 'setWeekOff', empId: id, month: ST.D.month, days: Number(v) }, 'Week-off days saved'); }
+function showCalc(id) {
+  const D = ST.D, x = D.pay.find(p => p.e.id === id), e = x.e, r = x.r, sh = D.byEmp[id].inMonth;
+  openDrawer(`<div class="row"><div><h2 style="margin:0">${esc(e.name)}</h2><div class="muted">${e.id} · ${esc(branchName(e.branch))} · ${e.payType} · ${e.status}</div></div><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="steps">
+      <div class="step"><div>Shifts worked<div class="f">${sh.length} shifts, ${r.halfDays} under ${D.config.halfDayHrs} h counted as ½ day</div></div><b>${r.days} days</b></div>
+      <div class="step"><div>Hours on shift</div><b>${r.workH.toFixed(2)} h</b></div>
+      <div class="step"><div>Rate per hour<div class="f">${rs(e.plan)} ÷ (${r.calDays} days × ${e.duty} h)</div></div><b>₹${r.rate.toFixed(2)}</b></div>
+      ${e.payType === 'HOURLY' ? `<div class="step"><div>Paid week-off credit<div class="f">${r.creditDays} day(s) × ${e.duty} h · ${r.eligible ? r.creditSource : 'not eligible'}</div></div><b>${r.creditH} h</b></div>` : ''}
+      <div class="step"><div>Base pay<div class="f">${r.basis}</div></div><b>${rs(r.base)}</b></div>
+      ${r.ded.map(d => `<div class="step"><div>− ${esc(d.category)}<div class="f">${esc(d.note)}</div></div><b style="color:var(--bad)">−${rs(d.amount)}</b></div>`).join('')}
+      ${r.add.map(d => `<div class="step"><div>+ ${esc(d.category)}<div class="f">${esc(d.note)}</div></div><b style="color:var(--ok)">+${rs(d.amount)}</b></div>`).join('')}
+      <div class="step total"><div><b>NET payable</b><div class="f">rounded to nearest ₹10</div></div><b style="font-size:18px">${rs(r.net)}</b></div></div>
+    <h2 style="margin-top:18px">Shifts</h2><table><thead><tr><th>Date</th><th>IN</th><th>OUT</th><th>Store</th><th class="num">Hours</th></tr></thead><tbody>
+    ${sh.map(s => `<tr><td>${s.date.slice(8)} ${D.monthLabel.slice(0, 3)}</td><td>${s.in}</td><td>${s.out}</td><td>${esc(branchName(s.store))}</td><td class="num">${s.hours.toFixed(2)}${s.hours < D.config.halfDayHrs ? ' <span class="tag t-warn">½</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No shifts this month</td></tr>'}</tbody></table>`);
+}
+function csv(rows, name) {
+  const t = rows.map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + t], { type: 'text/csv' })); a.download = name; a.click();
+}
+function exportAttendance() {
+  const D = ST.D, rows = [['Name', 'EMP ID', 'Date', 'Branch', 'IN', 'OUT', 'Total Hrs']];
+  D.employees.forEach(e => D.byEmp[e.id].inMonth.forEach(s => {
+    const h = Math.floor(s.hours), m = Math.round((s.hours - h) * 60);
+    rows.push([e.name, e.id, s.date, branchName(s.store).toUpperCase(), s.in, s.out.replace(' +1', ''), `${h}:${String(m).padStart(2, '0')}`]);
+  }));
+  csv(rows, `BWC_Attendance_${D.month}.csv`);
+}
+function exportPayroll() {
+  const D = ST.D, rows = [['WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan', 'Duty Hrs', 'Days Worked', 'Hrs Worked', 'Week-off Days', 'Base Salary', 'Total Ded', 'Total Add', 'NET']];
+  D.pay.forEach(({ e, r }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, (r.workH + r.creditH).toFixed(2), r.creditDays, r.base.toFixed(2), r.dedT, r.addT, r.net]));
+  csv(rows, `BWC_Payroll_${D.month}.csv`);
+}
+
+/* ---------------- STORES (admin) ---------------- */
+function stores() {
+  const D = ST.D;
+  $('#main').innerHTML = `<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Stores &amp; geofence</h2><div class="sp"></div><button class="btn y" onclick="editStore(null)">+ Add store</button></div>
+    <p class="muted">Easiest way to set a location: open this page on a phone <b>inside the store</b>, tap Edit → "Use my current location", wait for ±20 m or better, and Save.</p>
+    <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Latitude</th><th>Longitude</th><th class="num">Radius</th><th>Active</th><th>Last change</th><th></th></tr></thead><tbody>
+    ${D.stores.map(s => `<tr><td>${s.code}</td><td><b>${esc(s.name)}</b></td><td>${s.lat === '' ? '<span class="tag t-bad">not set</span>' : s.lat}</td><td>${s.lng}</td><td class="num">${s.radiusM} m</td><td>${s.active}</td><td class="muted">${esc(s.updatedBy)} ${String(s.updatedAt).slice(0, 10)}</td>
+      <td><button class="btn" onclick="editStore('${s.code}')">Edit</button> ${s.lat !== '' ? `<a class="btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Map</a>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function editStore(code) {
+  const s = code ? ST.D.stores.find(x => x.code === code) : { code: '', name: '', lat: '', lng: '', radiusM: 50, active: 'Yes' };
+  openDrawer(`<div class="row"><h2 style="margin:0">${code ? esc(s.name) : 'Add store'}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="form" style="margin-top:14px">
+      <label>Code<input type="text" id="s_code" value="${s.code}" ${code ? 'disabled' : ''} maxlength="4"></label>
+      <label>Name<input type="text" id="s_name" value="${esc(s.name)}"></label>
+      <label>Latitude<input type="text" id="s_lat" value="${s.lat}" inputmode="decimal"></label>
+      <label>Longitude<input type="text" id="s_lng" value="${s.lng}" inputmode="decimal"></label>
+      <label>Geofence radius (m)<input type="number" id="s_rad" value="${s.radiusM}"></label>
+      <label>Active<select id="s_act"><option ${s.active !== 'No' ? 'selected' : ''}>Yes</option><option ${s.active === 'No' ? 'selected' : ''}>No</option></select></label></div>
+    <button class="btn t" style="margin-top:12px" onclick="hereLoc()">Use my current location</button> <span class="muted" id="s_gps"></span>
+    <p class="muted">Or paste from Google Maps: long-press the store → copy the "13.05, 80.24" numbers.</p>
+    <button class="btn y" onclick="saveStore()">Save</button>`);
+}
+function hereLoc() {
+  if (!navigator.geolocation) return toast('Location not available', true);
+  $('#s_gps').textContent = 'Reading GPS…'; let best = null;
+  const w = navigator.geolocation.watchPosition(p => {
+    if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+    $('#s_lat').value = best.coords.latitude.toFixed(6); $('#s_lng').value = best.coords.longitude.toFixed(6);
+    $('#s_gps').textContent = '±' + Math.round(best.coords.accuracy) + ' m ' + (best.coords.accuracy <= 20 ? '✓ good' : '(wait for ±20 m)');
+  }, e => { $('#s_gps').textContent = e.message; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+  setTimeout(() => navigator.geolocation.clearWatch(w), 30000);
+}
+async function saveStore() {
+  await act({ action: 'saveStore', store: { code: $('#s_code').value, name: $('#s_name').value, lat: $('#s_lat').value.trim(), lng: $('#s_lng').value.trim(), radiusM: $('#s_rad').value, active: $('#s_act').value } }, 'Store saved');
+  closeDrawer();
+}
+
+/* ---------------- USERS (admin) ---------------- */
+function users() {
+  const D = ST.D;
+  $('#main').innerHTML = `<div class="card"><h2>Dashboard users</h2>
+    <p class="muted"><b>admin</b>: everything. <b>staff</b> (backend team): employees, PINs, review, manual punches, deductions/additions, payroll — not stores or users.</p>
+    <table><thead><tr><th>User</th><th>Role</th><th>Active</th></tr></thead><tbody>${D.users.map(u => `<tr><td><b>${esc(u.user)}</b></td><td>${u.role}</td><td>${u.active}</td></tr>`).join('')}</tbody></table>
+    <h2 style="margin-top:18px">Add or update a user</h2>
+    <div class="form"><label>User name<input type="text" id="u_user" placeholder="e.g. priya"></label>
+      <label>Role<select id="u_role"><option>staff</option><option>admin</option></select></label>
+      <label>Active<select id="u_act"><option>Yes</option><option>No</option></select></label>
+      <label>Password (8+ chars; blank = keep)<input type="password" id="u_pw" autocomplete="new-password"></label>
+      <button class="btn y" onclick="saveUser()">Save user</button></div></div>`;
+}
+function saveUser() { act({ action: 'saveUser', user: $('#u_user').value, role: $('#u_role').value, active: $('#u_act').value, password: $('#u_pw').value }, 'User saved'); }
+function pwDialog() {
+  openDrawer(`<div class="row"><h2 style="margin:0">Change my password</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="form" style="margin-top:14px"><label>Current password<input type="password" id="pw_old"></label><label>New password (8+)<input type="password" id="pw_new"></label></div>
+    <button class="btn y" style="margin-top:12px" onclick="chPw()">Change password</button>`);
+}
+async function chPw() { try { await api({ action: 'changePassword', oldPassword: $('#pw_old').value, newPassword: $('#pw_new').value }); toast('Password changed'); closeDrawer(); } catch (e) { toast(e.message, true); } }
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+if (ST.token) load().catch(e => renderLogin(e.message)); else renderLogin('');
+</script>
+</body>
+</html>
