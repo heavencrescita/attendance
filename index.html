@@ -26,14 +26,17 @@ input:focus{outline:none;border-color:var(--teal)}
 button{width:100%;border:0;border-radius:14px;padding:16px;font-size:18px;font-weight:800;cursor:pointer;margin-top:14px}
 button small{display:block;font-weight:500;font-size:13px;opacity:.85;margin-top:2px}
 button:disabled{opacity:.45}
-.y{background:var(--yellow);color:#000}.t{background:var(--teal);color:#fff}.k{background:var(--black);color:var(--yellow)}.g{background:#ececE6;color:#222}
+.y{background:var(--yellow);color:#000}.k{background:var(--black);color:var(--yellow)}.g{background:#ececE6;color:#222}
 .hello{font-size:22px;font-weight:800;margin:0}
 .muted{color:var(--muted)}
 .state{margin-top:8px;padding:10px 12px;border-radius:10px;background:#f1f1ec;font-size:14.5px;line-height:1.4}
 .cam{position:relative;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:3/4;margin-top:12px}
-.cam video,.cam img{width:100%;height:100%;object-fit:cover;display:block}
-.cam video{transform:scaleX(-1)}
-.oval{position:absolute;inset:12% 18%;border:3px dashed rgba(255,242,0,.8);border-radius:50%;pointer-events:none}
+.cam video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
+.oval{position:absolute;inset:10% 17%;border:4px dashed rgba(255,242,0,.85);border-radius:50%;pointer-events:none;transition:border-color .2s}
+.oval.ok{border-color:#3ddc84;border-style:solid}
+.prompt{position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.72);color:#fff;text-align:center;padding:12px 10px;font-size:20px;font-weight:800;display:none}
+.prompt small{display:block;font-size:14px;font-weight:500;color:var(--yellow)}
+.prompt .stp{font-size:12px;color:#ccc;font-weight:500}
 .gps{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}
 .dot{width:10px;height:10px;border-radius:50%;background:#bbb;flex:none}
 .dot.ok{background:var(--ok)}.dot.wait{background:#e0a800;animation:p 1s infinite}.dot.bad{background:var(--bad)}
@@ -45,13 +48,13 @@ button:disabled{opacity:.45}
 .err{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;display:none}
 .hide{display:none}
 .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
+.strip{width:100%;border-radius:10px;margin-top:12px}
 </style>
 </head>
 <body>
 <header><div class="logo">BWC</div><div><b>The Belgian Waffle Cafe</b><small>Attendance · வருகைப் பதிவு</small></div></header>
 <main>
 
-<!-- 1. Login -->
 <section id="s-login" class="card">
   <label for="wid">WAFF number <span>WAFF எண் — e.g. 12 for WAFF-012</span></label>
   <div class="prefix"><b>WAFF-</b><input id="wid" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="012"></div>
@@ -61,21 +64,20 @@ button:disabled{opacity:.45}
   <div class="err" id="e-login"></div>
 </section>
 
-<!-- 2. Punch -->
 <section id="s-punch" class="hide">
   <div class="card">
     <p class="hello" id="hello"></p>
     <div class="state" id="state"></div>
-    <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval"></div></div>
+    <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval" id="oval"></div>
+      <div class="prompt" id="prompt"><span class="stp" id="p-step"></span><div id="p-en"></div><small id="p-ta"></small></div></div>
     <div class="gps"><span class="dot wait" id="gdot"></span><span id="gtxt">Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது</span></div>
-    <button class="k" id="b-punch" disabled onclick="capture()"></button>
+    <button class="k" id="b-punch" disabled onclick="startCheck()"></button>
     <button class="g" onclick="logout()">Cancel<small>ரத்து செய்</small></button>
     <div class="err" id="e-punch"></div>
   </div>
-  <p class="foot">Allow camera and location when asked · கேமரா மற்றும் இருப்பிட அனுமதி வழங்கவும்</p>
+  <p class="foot">You will be asked to do 2 quick actions on camera (blink, smile…). Photos from the gallery cannot be used.<br>கேமராவில் 2 செயல்களைச் செய்யச் சொல்லப்படும்.</p>
 </section>
 
-<!-- 3. Result -->
 <section id="s-result" class="hide">
   <div class="card result" id="resbox">
     <div class="big" id="r-icon"></div>
@@ -89,15 +91,140 @@ button:disabled{opacity:.45}
 
 </main>
 <script>
+// BWC live-capture checks (shared by the staff punch page and the manager store-capture page)
+//  • Live camera only — there is no file picker anywhere, so gallery / downloaded images cannot be used.
+//  • Virtual-camera apps (OBS, ManyCam, DroidCam…) are refused by their device label.
+//  • Random gestures: the server picks 2 of BLINK / SMILE / OPEN_MOUTH / TURN_HEAD in a random order; MediaPipe face
+//    landmarks in the browser confirm each one live. A printed photo or a picture on another phone cannot do them on cue.
+//  • Frozen-feed check for shop photos: 3 frames 250 ms apart must show natural sensor noise / hand movement.
+const Live = (() => {
+  const VISION = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+  const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const VIRTUAL = /virtual|obs|manycam|droidcam|snap camera|epoccam|iriun|xsplit|splitcam|camtwist|ivcam|e2esoft/i;
+  const TEXT = {
+    BLINK: ['Blink your eyes', 'கண்களை சிமிட்டவும்'],
+    SMILE: ['Give a big smile', 'புன்னகைக்கவும்'],
+    OPEN_MOUTH: ['Open your mouth wide', 'வாயைத் திறக்கவும்'],
+    TURN_HEAD: ['Turn your head to one side', 'தலையை ஒரு பக்கம் திருப்பவும்']
+  };
+  let landmarker = null, loading = null;
+
+  async function load() {
+    if (landmarker) return landmarker;
+    if (!loading) loading = (async () => {
+      const v = await import(VISION + '/vision_bundle.mjs');
+      const files = await v.FilesetResolver.forVisionTasks(VISION + '/wasm');
+      const opts = d => ({ baseOptions: { modelAssetPath: MODEL, delegate: d }, outputFaceBlendshapes: true, runningMode: 'VIDEO', numFaces: 2 });
+      try { landmarker = await v.FaceLandmarker.createFromOptions(files, opts('GPU')); }
+      catch (e) { landmarker = await v.FaceLandmarker.createFromOptions(files, opts('CPU')); }
+      return landmarker;
+    })().catch(e => { loading = null; throw e; });
+    return loading;
+  }
+
+  async function openCamera(video, facing) {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 720 }, height: { ideal: 960 } }, audio: false });
+    const track = stream.getVideoTracks()[0];
+    const label = (track && track.label) || '';
+    if (VIRTUAL.test(label)) { stream.getTracks().forEach(t => t.stop()); throw new Error('Virtual camera apps are not allowed (' + label + ')'); }
+    video.srcObject = stream; video.setAttribute('playsinline', ''); video.muted = true;
+    await video.play().catch(() => {});
+    await new Promise(r => { if (video.videoWidth) r(); else video.onloadedmetadata = () => r(); });
+    return { stream, label };
+  }
+  function stop(stream) { if (stream) stream.getTracks().forEach(t => t.stop()); }
+
+  function grab(video, w, mirror) {
+    const h = Math.round(video.videoHeight * w / video.videoWidth), c = document.createElement('canvas');
+    c.width = w; c.height = h; const g = c.getContext('2d');
+    if (mirror) { g.translate(w, 0); g.scale(-1, 1); }
+    g.drawImage(video, 0, 0, w, h); return c;
+  }
+  const jpeg = (c, q) => c.toDataURL('image/jpeg', q || 0.72);
+
+  function scores(res) {
+    const b = {}; ((res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories) || []).forEach(x => { b[x.categoryName] = x.score; });
+    const lm = res.faceLandmarks && res.faceLandmarks[0];
+    let yaw = 0, size = 0;
+    if (lm) { const L = lm[234], R = lm[454], N = lm[1]; const w = Math.abs(R.x - L.x) || 1; yaw = (N.x - (L.x + R.x) / 2) / w; size = w; }
+    return { faces: (res.faceLandmarks || []).length, blink: ((b.eyeBlinkLeft || 0) + (b.eyeBlinkRight || 0)) / 2,
+      smile: ((b.mouthSmileLeft || 0) + (b.mouthSmileRight || 0)) / 2, jaw: b.jawOpen || 0, yaw: Math.abs(yaw), size };
+  }
+  // per-gesture state machines: must go from neutral → action (so a still face can never pass)
+  function detector(g) {
+    let armed = false;
+    const neutral = { BLINK: s => s.blink < 0.25, SMILE: s => s.smile < 0.3, OPEN_MOUTH: s => s.jaw < 0.15, TURN_HEAD: s => s.yaw < 0.08 }[g];
+    const active = { BLINK: s => s.blink > 0.55, SMILE: s => s.smile > 0.6, OPEN_MOUTH: s => s.jaw > 0.45, TURN_HEAD: s => s.yaw > 0.2 }[g];
+    return s => { if (neutral(s)) armed = true; return armed && active(s); };
+  }
+
+  // Run the random-gesture challenge on an already-playing front-camera <video>.
+  async function challenge(video, steps, ui) {
+    const t0 = Date.now(), out = { method: 'facemesh', steps: [], maxFaces: 0, cameraLabel: ui.cameraLabel || '' };
+    const lmk = await load();
+    const tiles = [];
+    let last = -1;
+    const frame = () => new Promise(r => requestAnimationFrame(() => {
+      const ts = performance.now(); if (ts <= last) { r(null); return; } last = ts;
+      try { r(scores(lmk.detectForVideo(video, ts))); } catch (e) { r(null); }
+    }));
+    // neutral frame first (one face, centred, close enough)
+    ui.prompt('Look at the camera', 'கேமராவைப் பார்க்கவும்', 0);
+    let ok = false; const tn = Date.now();
+    while (Date.now() - tn < 8000) { const s = await frame(); if (!s) continue; out.maxFaces = Math.max(out.maxFaces, s.faces);
+      ui.face(s.faces); if (s.faces === 1 && s.size > 0.18 && s.blink < 0.3 && s.yaw < 0.1) { ok = true; break; } }
+    if (!ok) { out.durationMs = Date.now() - t0; out.error = 'Face not found — come closer, good light'; return out; }
+    tiles.push(grab(video, 240, true));
+    for (let i = 0; i < steps.length; i++) {
+      const g = steps[i], hit = detector(g), ts = Date.now(); let passed = false;
+      ui.prompt(TEXT[g][0], TEXT[g][1], i + 1);
+      while (Date.now() - ts < 9000) { const s = await frame(); if (!s) continue; out.maxFaces = Math.max(out.maxFaces, s.faces); ui.face(s.faces);
+        if (s.faces === 1 && hit(s)) { passed = true; break; } }
+      out.steps.push({ gesture: g, passed, ms: Date.now() - ts });
+      if (!passed) break;
+      tiles.push(grab(video, 240, true));
+      await new Promise(r => setTimeout(r, 250));
+    }
+    out.passed = out.steps.length === steps.length && out.steps.every(s => s.passed) && out.maxFaces === 1;
+    out.durationMs = Date.now() - t0;
+    if (out.passed) out.strip = jpeg(stripOf(tiles), 0.72);
+    return out;
+  }
+  function stripOf(tiles) {
+    const w = tiles[0].width, h = tiles[0].height, c = document.createElement('canvas');
+    c.width = w * tiles.length; c.height = h; const g = c.getContext('2d');
+    tiles.forEach((t, i) => g.drawImage(t, i * w, 0));
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, h - 18, c.width, 18); g.fillStyle = '#fff200'; g.font = '12px sans-serif';
+    g.fillText('BWC live check ' + new Date().toLocaleString('en-IN'), 6, h - 5);
+    return c;
+  }
+
+  // Shop photo: 3 frames 250 ms apart — a frozen / injected feed shows (almost) zero change between frames
+  async function capturePhoto(video) {
+    const small = [];
+    for (let i = 0; i < 3; i++) { const c = grab(video, 32, false); small.push(c.getContext('2d').getImageData(0, 0, c.width, c.height).data); if (i < 2) await new Promise(r => setTimeout(r, 250)); }
+    let diff = 0, n = 0;
+    for (let k = 1; k < 3; k++) for (let j = 0; j < small[0].length; j += 4) { diff += Math.abs(small[k][j] - small[k - 1][j]) + Math.abs(small[k][j + 1] - small[k - 1][j + 1]); n += 2; }
+    const motion = diff / n;
+    const big = grab(video, 960, false);
+    return { dataUrl: jpeg(big, 0.7), motion, still: motion < 0.25, thumb: small[2] };
+  }
+  function similarity(a, b) {   // 0..1 on 32px thumbnails
+    if (!a || !b || a.length !== b.length) return 0;
+    let d = 0; for (let j = 0; j < a.length; j += 4) d += Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]);
+    return 1 - d / (a.length / 4 * 3 * 255);
+  }
+  return { load, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
+})();
+
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
 const $ = id => document.getElementById(id);
-let S = {}; let stream = null; let watch = null; let autoTimer = null;
+let S = {}; let cam = null; let watch = null; let autoTimer = null;
 
 function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 function fmtTime(iso) { return iso ? iso.slice(11, 16) : ''; }
 function fmtDay(iso) { const d = new Date(iso); return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
-
 async function api(body) {
   const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });   // text/plain → no CORS preflight
   const j = await r.json();
@@ -113,15 +240,15 @@ async function login() {
   $('b-login').disabled = true;
   try {
     const st = await api({ action: 'staffStatus', id, pin });
-    S = { id: st.id, pin, name: st.name, next: st.next, best: null, gpsError: '' };
+    S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '' };
     $('hello').textContent = 'Hi ' + st.name.split(' ')[0] + ' 👋';
     const longAgo = st.next === 'OUT' && (Date.now() - new Date(st.openSince).getTime()) > 14 * 3600000;
     $('state').innerHTML = st.next === 'OUT'
       ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>` +
         (longAgo ? `<br><b style="color:var(--bad)">That was over 14 hours ago. If you forgot to punch out yesterday, tell your manager after this.</b>` : '')
       : `You are not punched in. Start your shift.<br><span class="muted">பணியைத் தொடங்க வருகையைப் பதிவு செய்யவும்</span>`;
-    $('b-punch').innerHTML = st.next === 'OUT' ? 'Take selfie · Punch OUT<small>செல்ஃபி எடுத்து பணி முடிவு</small>' : 'Take selfie · Punch IN<small>செல்ஃபி எடுத்து பணிக்கு வருகை</small>';
-    show('s-punch'); startGps(); startCam();
+    $('b-punch').innerHTML = (st.next === 'OUT' ? 'Start face check · Punch OUT' : 'Start face check · Punch IN') + '<small>முக சரிபார்ப்பைத் தொடங்கவும்</small>';
+    show('s-punch'); startGps(); startCam(); Live.load().catch(() => {});   // start downloading the face model early
   } catch (e) { err('e-login', e.message); }
   finally { $('b-login').disabled = false; }
 }
@@ -142,32 +269,44 @@ function startGps() {
 function setGps(cls, txt) { $('gdot').className = 'dot ' + cls; $('gtxt').textContent = txt; }
 
 async function startCam() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 } }, audio: false });
-    $('video').srcObject = stream; S.cam = true;
-  } catch (e) {
-    S.cam = false;
-    err('e-punch', 'Camera is blocked (' + e.name + '). Allow camera for this site and reload · கேமரா அனுமதி தேவை');
-  }
+  try { cam = await Live.openCamera($('video'), 'user'); S.cam = true; }
+  catch (e) { S.cam = false; err('e-punch', (/Virtual/.test(e.message) ? e.message : 'Camera is blocked (' + e.name + '). Allow camera for this site and reload') + ' · கேமரா அனுமதி தேவை'); }
   readyCheck();
 }
 function readyCheck() { $('b-punch').disabled = !(S.cam && (S.best || S.gpsError)); }
 
-async function capture() {
-  err('e-punch');
-  const v = $('video'); if (!v.videoWidth) return err('e-punch', 'Camera not ready yet');
-  const W = 480, H = Math.round(v.videoHeight * W / v.videoWidth), c = document.createElement('canvas');
-  c.width = W; c.height = H; const g = c.getContext('2d'); g.translate(W, 0); g.scale(-1, 1); g.drawImage(v, 0, 0, W, H);
-  const selfie = c.toDataURL('image/jpeg', 0.72);
-  $('b-punch').disabled = true; $('b-punch').innerHTML = 'Saving… <small>சேமிக்கப்படுகிறது</small>';
-  stopDevices();
+function ui() {
+  return {
+    cameraLabel: cam ? cam.label : '',
+    prompt: (en, ta, i) => { $('prompt').style.display = 'block'; $('p-step').textContent = i ? `Step ${i} of ${S.ch.steps.length}` : 'Get ready'; $('p-en').textContent = en; $('p-ta').textContent = ta; },
+    face: n => { $('oval').classList.toggle('ok', n === 1); }
+  };
+}
+
+async function startCheck() {
+  err('e-punch'); $('b-punch').disabled = true; $('b-punch').innerHTML = 'Follow the instructions on camera<small>திரையில் உள்ள அறிவுறுத்தல்களைப் பின்பற்றவும்</small>';
+  let live;
   try {
-    const r = await api({ action: 'punch', id: S.id, pin: S.pin, selfie, lat: S.best ? S.best.lat : null, lng: S.best ? S.best.lng : null,
-      acc: S.best ? S.best.accuracy : null, gpsError: S.gpsError, ua: navigator.userAgent });
+    live = await Live.challenge($('video'), S.ch.steps, ui());
+  } catch (e) {   // face model could not load (very old phone / no network to the model) — punch is saved but flagged
+    live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam ? cam.label : '' };
+  }
+  $('prompt').style.display = 'none';
+  if (live.method === 'facemesh' && !live.passed) {
+    $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
+    return err('e-punch', (live.error || 'The actions were not detected. Keep only your face in the oval, in good light, and do each action clearly.') + ' · மீண்டும் முயற்சிக்கவும்');
+  }
+  const selfie = live.strip || Live.jpeg(Live.grab($('video'), 480, true), 0.72);
+  delete live.strip;
+  $('b-punch').innerHTML = 'Saving… <small>சேமிக்கப்படுகிறது</small>';
+  const best = S.best; stopDevices();
+  try {
+    const r = await api({ action: 'punch', id: S.id, pin: S.pin, nonce: S.ch.nonce, liveness: live, selfie,
+      lat: best ? best.lat : null, lng: best ? best.lng : null, acc: best ? best.accuracy : null, gpsError: S.gpsError, ua: navigator.userAgent });
     showResult(r);
   } catch (e) {
-    err('e-punch', 'Not saved: ' + e.message + ' · பதிவு ஆகவில்லை — மீண்டும் முயற்சிக்கவும்');
-    $('b-punch').innerHTML = 'Try again<small>மீண்டும் முயற்சி</small>'; $('b-punch').disabled = false; startCam(); startGps();
+    err('e-punch', 'Not saved: ' + e.message + ' · பதிவு ஆகவில்லை');
+    $('b-punch').innerHTML = 'Log in again<small>மீண்டும் உள்நுழையவும்</small>'; $('b-punch').disabled = false; $('b-punch').onclick = logout;
   }
 }
 
@@ -182,14 +321,14 @@ function showResult(r) {
   let n = 15; $('r-auto').textContent = `Closing in ${n}s`;
   autoTimer = setInterval(() => { n--; $('r-auto').textContent = `Closing in ${n}s`; if (n <= 0) logout(); }, 1000);
 }
-
 function stopDevices() {
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (cam) { Live.stop(cam.stream); cam = null; }
   if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; }
 }
 function logout() {
   stopDevices(); clearInterval(autoTimer); S = {};
-  $('wid').value = ''; $('pin').value = ''; err('e-login'); err('e-punch'); $('video').srcObject = null;
+  $('wid').value = ''; $('pin').value = ''; err('e-login'); err('e-punch'); $('video').srcObject = null; $('prompt').style.display = 'none';
+  $('b-punch').onclick = startCheck;
   show('s-login');
 }
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });

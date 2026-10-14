@@ -55,8 +55,8 @@ input.mini{width:58px;text-align:right;padding:3px 6px}
 .step .f{font-size:12px;color:var(--muted);margin-top:2px}.step.total{border:2px solid var(--teal)}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
 .form label{font-size:12px;color:var(--muted);display:grid;gap:4px}
-.flag{display:grid;grid-template-columns:110px 1fr;gap:14px}
-.selfie{width:110px;height:140px;border-radius:10px;background:var(--chip);display:grid;place-items:center;color:var(--muted);font-size:11px;text-align:center;overflow:hidden;cursor:pointer}
+.flag{display:grid;grid-template-columns:150px 1fr;gap:14px}
+.selfie{width:150px;height:140px;border-radius:10px;background:var(--chip);display:grid;place-items:center;color:var(--muted);font-size:11px;text-align:center;overflow:hidden;cursor:pointer}
 .selfie img{width:100%;height:100%;object-fit:cover}
 .bar{height:8px;background:var(--chip);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--teal)}
 #login{max-width:380px;margin:60px auto}
@@ -73,8 +73,13 @@ input.mini{width:58px;text-align:right;padding:3px 6px}
 <div id="toast"></div>
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
-// BWC payroll engine — shared by the admin dashboard. Rules match BWC_Payroll_June2026_MASTER_V9
-// (verified: 60/62 employees identical on June 2026 data; the 2 gaps are a ₹5 rounding tie and a rate error in V9).
+// BWC payroll engine — mirrors the formulas in BWC_Payroll_Sep2026_FINAL_v3.xlsx (SEP-26 PAYROLL sheet).
+//  Days worked : shift > halfDayHrs (4 h) = 1 day, 0 < shift ≤ 4 h = ½ day
+//  Week-off    : W/O eligible → credit days = min(WkOff, days ≥ workDays ? WkOff : INT((days+1)/7)); hours = days × duty
+//  Rate / hr   : eligible → plan ÷ (calDays × duty); not eligible → dailyRate ÷ duty
+//  FIXED       : base = plan ÷ workDays × min(days, workDays); no OT
+//  HOURLY      : hours = clocked + credit; OT hrs = max(0, clocked − workDays × duty); base = rate × (hours − OT); OT pay = OT × rate × otMultiplier
+//  NET         : Inactive → 0, else ROUND((base + OT + additions − deductions) ÷ 10) × 10 (Excel rounding); negative NET carries forward
 const COUNTED = ['ACCEPTED', 'APPROVED', 'MANUAL'];
 const MAX_SHIFT_MS = 24 * 3600000;   // must match OPEN_SHIFT_MAX_H in Code.gs
 const LONG_SHIFT_H = 20;
@@ -104,31 +109,49 @@ function buildShifts(punches, now) {
   return { shifts, issues };
 }
 
+// Imported (Excel) shifts → same shape as punched shifts
+function importedShifts(rows) {
+  return rows.map(r => ({ date: r.date, day: Number(String(r.date).slice(8, 10)), in: r.inT, out: r.outT, hours: Number(r.hours), store: r.branch, imported: true }));
+}
+
 function daysInMonth(month) { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
 
 // e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
 function calcPay(e, shifts, ctx) {
   const cfg = ctx.cfg, calDays = daysInMonth(ctx.month), workDays = calDays - Number(cfg.weekOffsPerMonth || 4);
+  const halfH = Number(cfg.halfDayHrs || 4), otMult = Number(cfg.otMultiplier || 1);
   const duty = Number(e.duty) || 9, plan = Number(e.plan) || 0;
-  const workH = shifts.reduce((s, x) => s + x.hours, 0);
-  const halfDays = shifts.filter(x => x.hours < Number(cfg.halfDayHrs || 4)).length;
-  const days = shifts.length - 0.5 * halfDays;
-  const rate = plan / (calDays * duty);
-  const eligible = e.payType === 'HOURLY' && e.woEligible !== 'No' && e.status === 'Active';
+  const worked = shifts.filter(x => x.hours > 0);
+  const clockH = worked.reduce((s, x) => s + x.hours, 0);
+  const halfDays = worked.filter(x => x.hours <= halfH).length;
+  const days = worked.length - 0.5 * halfDays;
+  const eligible = e.woEligible !== 'No';
+  const woMax = e.woDays === '' || e.woDays == null ? Number(cfg.weekOffsPerMonth || 4) : Number(e.woDays);
+  const rate = eligible ? plan / (calDays * duty) : (Number(e.dailyRate) || plan / calDays) / duty;
   const wo = (ctx.weekOff || []).find(w => w.empId === e.id);
-  const autoCredit = Math.min(Number(cfg.weekOffsPerMonth || 4), Math.floor(days / 6));
-  const creditDays = eligible ? (wo ? Number(wo.days) : autoCredit) : 0;
-  const creditSource = !eligible ? '' : (wo ? 'set by ' + wo.setBy : 'auto');
+  const ruleCredit = eligible ? Math.min(woMax, days >= workDays ? woMax : Math.floor((days + 1) / 7)) : 0;
+  const creditDays = wo ? Number(wo.days) : ruleCredit;
+  const creditSource = wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
   const creditH = creditDays * duty;
   const active = e.status === 'Active';
-  let base = 0, basis;
-  if (!active) basis = 'Inactive — not paid';
-  else if (e.payType === 'FIXED') { base = plan * Math.min(days, workDays) / workDays; basis = `₹${inr(plan)} × min(${days}, ${workDays}) ÷ ${workDays}`; }
-  else { base = (workH + creditH) * rate; basis = `(${workH.toFixed(2)} h + ${creditH} h week-off) × ₹${rate.toFixed(2)}/h`; }
+  let base = 0, otH = 0, otPay = 0, basis;
+  if (e.payType === 'FIXED') {
+    base = active ? plan / workDays * Math.min(days, workDays) : 0;
+    basis = `₹${inr(plan)} ÷ ${workDays} × min(${days}, ${workDays})`;
+  } else {
+    const hrs = clockH + creditH, expH = workDays * duty;
+    otH = Math.max(0, clockH - expH);
+    base = active ? rate * (hrs - otH) : 0;
+    otPay = active ? otH * rate * otMult : 0;
+    basis = `(${clockH.toFixed(2)} h + ${creditH} h week-off − ${otH.toFixed(2)} h OT) × ₹${rate.toFixed(2)}/h`;
+  }
   const ded = (ctx.ded || []).filter(x => x.empId === e.id), add = (ctx.add || []).filter(x => x.empId === e.id);
   const dedT = ded.reduce((s, x) => s + Number(x.amount), 0), addT = add.reduce((s, x) => s + Number(x.amount), 0);
-  const net = active ? Math.round((base - dedT + addT) / 10) * 10 : 0;
-  return { workH, days, halfDays, calDays, workDays, rate, creditDays, creditSource, creditH, eligible, base, basis, ded, add, dedT, addT, net };
+  const gross = base + otPay + addT - dedT;
+  const net = active ? excelRound(gross / 10) * 10 : 0;
+  return { workH: clockH, days, halfDays, calDays, workDays, rate, creditDays, creditSource, creditH, eligible, base, otH, otPay, basis,
+    ded, add, dedT, addT, gross, net, payable: Math.max(0, net), carry: Math.max(0, -net) };
 }
 function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
 
@@ -189,12 +212,19 @@ function derive() {
   D.byEmp = {}; D.issues = [];
   D.employees.forEach(e => {
     const b = buildShifts(D.punches.filter(p => p.empId === e.id));
-    b.inMonth = b.shifts.filter(s => s.date.slice(0, 7) === D.month);
+    b.inMonth = b.shifts.filter(s => s.date.slice(0, 7) === D.month)
+      .concat(importedShifts((D.importedShifts || []).filter(r => r.empId === e.id))).sort((x, y) => (x.date + x.in).localeCompare(y.date + y.in));
     D.byEmp[e.id] = b;
     b.issues.forEach(i => D.issues.push(Object.assign({ emp: e }, i)));
   });
   D.flagged = D.punches.filter(p => p.status === 'FLAGGED').sort((a, b) => Number(b.epoch) - Number(a.epoch));
   D.pay = D.employees.map(e => ({ e, r: calcPay(e, D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }) }));
+  D.v9 = Object.fromEntries((D.v9Ref || []).map(v => [v.empId, v]));
+  D.hasV9 = (D.v9Ref || []).length > 0;
+  D.unmatched = (D.importedShifts || []).filter(r => !r.empId);
+  D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
+  D.notInV9 = D.hasV9 ? D.pay.filter(x => x.v9 === null && x.r.net !== 0) : [];
+  D.v9Match = D.pay.filter(x => x.v9 !== null && x.v9 === x.r.net).length;
   const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
   if (!ST.day || ST.day.slice(0, 7) !== D.month) ST.day = today.slice(0, 7) === D.month ? today : D.month + '-01';
 }
@@ -234,6 +264,9 @@ function overview() {
   const maxC = Math.max(1, ...byB.map(x => x.cost));
   $('#main').innerHTML = `
   ${noStore.length ? `<div class="note"><b>${noStore.length} store(s) have no location yet</b> — every punch there is flagged until it's set: ${noStore.map(s => esc(s.name)).join(', ')}. ${D.role === 'admin' ? '<a href="#" onclick="go(\'stores\');return false">Set locations →</a>' : 'Ask an admin to set them.'}</div>` : ''}
+  ${D.hasV9 ? `<div class="note" style="background:var(--ok-bg);color:var(--ok)"><b>${esc(D.monthLabel)} is loaded from the V9 workbook.</b> App payroll matches V9 for <b>${D.v9Match} of ${D.v9Ref.length}</b> employees${D.v9Match === D.v9Ref.length ? ' — every rupee' : ''}. <a href="#" onclick="go('pay');return false">Payroll →</a></div>` : ''}
+  ${D.notInV9.length ? `<div class="note" style="background:var(--bad-bg);color:var(--bad)"><b>${D.notInV9.length} employee(s) worked this month but are missing from the V9 payroll</b> (${rs(D.notInV9.reduce((s, x) => s + x.r.net, 0))} unpaid): ${D.notInV9.map(x => esc(x.e.id + ' ' + x.e.name)).join(', ')}.</div>` : ''}
+  ${D.unmatched.length ? `<div class="note"><b>${D.unmatched.length} attendance rows have no WAFF ID</b> and are not paid by V9 or here: ${[...new Set(D.unmatched.map(u => u.name))].map(esc).join(', ')}. Add these people to the master or fix the IDs.</div>` : ''}
   ${noPin.length ? `<div class="note"><b>${noPin.length} active employee(s) have no PIN</b> and can't punch yet. <a href="#" onclick="go('emps');return false">Issue PINs →</a></div>` : ''}
   <div class="grid kpis">
     <div class="card kpi accent"><div class="l">On shift right now</div><div class="v">${onShift.length}</div><div class="s">punched IN, not yet OUT</div></div>
@@ -260,7 +293,7 @@ function overview() {
 function daily() {
   const D = ST.D, b = ST.branch, day = ST.day;
   const list = D.employees.filter(e => (e.status === 'Active' || D.byEmp[e.id].shifts.length) && (b === 'ALL' || e.branch === b));
-  const rows = list.map(e => ({ e, s: D.byEmp[e.id].shifts.filter(x => x.date === day), open: D.byEmp[e.id].issues.filter(i => i.punch.time.slice(0, 10) === day) }));
+  const rows = list.map(e => ({ e, s: D.byEmp[e.id].shifts.filter(x => x.date === day).concat(D.byEmp[e.id].inMonth.filter(x => x.imported && x.date === day)), open: D.byEmp[e.id].issues.filter(i => i.punch.time.slice(0, 10) === day) }));
   const pending = D.punches.filter(p => p.status === 'FLAGGED' && p.time.slice(0, 10) === day);
   $('#main').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Daily attendance</h2><div class="sp"></div>
@@ -270,7 +303,7 @@ function daily() {
     <div class="scroll"><table><thead><tr><th>Employee</th><th>Store</th><th>IN</th><th>OUT</th><th class="num">Hours</th><th>Status</th><th>Selfie IN</th><th>Selfie OUT</th></tr></thead><tbody>
     ${rows.sort((x, y) => (y.s.length + y.open.length) - (x.s.length + x.open.length) || x.e.branch.localeCompare(y.e.branch)).map(({ e, s, open }) => {
       const name = `<td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td>`;
-      if (s.length) return s.map(x => `<tr>${name}<td>${esc(branchName(x.store))}</td><td>${x.in}</td><td>${x.out}</td><td class="num">${x.hours.toFixed(2)}</td><td>${x.hours < D.config.halfDayHrs ? '<span class="tag t-warn">Half day</span>' : '<span class="tag t-ok">Present</span>'} ${[x.inPunch, x.outPunch].some(p => p.status === 'MANUAL') ? '<span class="tag t-mute">manual</span>' : ''}</td><td>${selfieBtn(x.inPunch)}</td><td>${selfieBtn(x.outPunch)}</td></tr>`).join('');
+      if (s.length) return s.map(x => `<tr>${name}<td>${esc(branchName(x.store))}</td><td>${x.in}</td><td>${x.out}</td><td class="num">${x.hours.toFixed(2)}</td><td>${x.hours < D.config.halfDayHrs ? '<span class="tag t-warn">Half day</span>' : '<span class="tag t-ok">Present</span>'} ${x.imported ? '<span class="tag t-mute">from V9</span>' : [x.inPunch, x.outPunch].some(p => p.status === 'MANUAL') ? '<span class="tag t-mute">manual</span>' : ''}</td><td>${selfieBtn(x.inPunch)}</td><td>${selfieBtn(x.outPunch)}</td></tr>`).join('');
       if (open.length) return open.map(i => `<tr>${name}<td>${esc(branchName(i.punch.store))}</td><td>${i.punch.type === 'IN' ? i.punch.time.slice(11, 16) : '—'}</td><td>${i.punch.type === 'OUT' ? i.punch.time.slice(11, 16) : '—'}</td><td class="num muted">—</td><td><span class="tag ${i.kind === 'On shift now' ? 't-ok' : 't-bad'}">${i.kind}</span></td><td>${selfieBtn(i.punch)}</td><td></td></tr>`).join('');
       return `<tr>${name}<td>${esc(branchName(e.branch))}</td><td class="muted">—</td><td class="muted">—</td><td class="num muted">—</td><td><span class="tag t-mute">No punch</span></td><td></td><td></td></tr>`;
     }).join('')}</tbody></table></div></div>`;
@@ -300,6 +333,7 @@ function flags() {
         <div><div class="row"><b>${esc(e.name)}</b><span class="muted">${p.empId}</span></div>
           <div class="muted" style="margin-top:4px">${p.type} · ${p.time.slice(0, 16).replace('T', ' ')}</div>
           <div style="margin-top:6px"><span class="tag t-warn">${esc(p.reason)}</span></div>
+          ${p.liveness ? `<div class="muted" style="margin-top:4px;font-size:12px">Face check: ${esc(liveTxt(p.liveness))}</div>` : ''}
           <div class="muted" style="margin-top:6px">Nearest: ${esc(branchName(p.store))}${p.distanceM !== '' ? ' · ' + p.distanceM + ' m' : ''}${p.accuracyM !== '' ? ' · GPS ±' + p.accuracyM + ' m' : ''}</div>
           ${p.lat !== '' ? `<div style="margin-top:4px"><a href="https://maps.google.com/?q=${p.lat},${p.lng}" target="_blank" rel="noopener">Open in Maps</a></div>` : ''}
           <div class="row" style="margin-top:10px"><button class="btn g" onclick="review('${p.punchId}','approve')">Approve</button><button class="btn r" onclick="review('${p.punchId}','reject')">Reject</button></div>
@@ -313,6 +347,7 @@ function flags() {
     </tbody></table>
     <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
 }
+function liveTxt(s) { try { const l = JSON.parse(s); return (l.method === 'facemesh' ? 'asked ' + l.asked.join(' → ') + ', did ' + (l.done.join(' → ') || 'nothing') : 'not available on this phone') + (l.faces > 1 ? ', ' + l.faces + ' faces' : ''); } catch (e) { return s; } }
 async function thumb(pid, sid) { if (!sid) return; const el = $('#sf_' + pid); el.textContent = 'Loading…'; try { el.innerHTML = `<img src="${await loadSelfie(sid)}">`; } catch (e) { el.textContent = e.message; } }
 function review(id, d) { act({ action: 'reviewPunch', punchId: id, decision: d }, d === 'approve' ? 'Approved' : 'Rejected'); }
 function manualDialog(empId, type, ref) {
@@ -365,13 +400,15 @@ function editEmp(id) {
       <label>Planned salary (₹)<input type="number" id="f_plan" value="${e.plan}"></label>
       <label>Duty hours / shift<input type="number" id="f_duty" value="${e.duty}"></label>
       <label>Week-off paid<select id="f_wo"><option ${e.woEligible !== 'No' ? 'selected' : ''}>Yes</option><option ${e.woEligible === 'No' ? 'selected' : ''}>No</option></select></label>
+      <label>Paid week-offs / month<input type="number" id="f_wod" value="${e.woDays === '' || e.woDays == null ? 4 : e.woDays}"></label>
+      <label>Daily rate (₹, if no paid week-off)<input type="number" id="f_dr" value="${Number(e.dailyRate || 0).toFixed(2)}"></label>
       <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
     </div><p class="muted">Every change is written to the Audit sheet (who, when, old → new).</p>
     <button class="btn y" onclick="saveEmp(${id ? 'false' : 'true'})">Save</button>`);
 }
 async function saveEmp(isNew) {
   await act({ action: 'saveEmployee', isNew, employee: { id: $('#f_id').value, name: $('#f_name').value, branch: $('#f_branch').value, roaming: $('#f_roam').value,
-    payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, status: $('#f_status').value } }, 'Saved');
+    payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, woDays: $('#f_wod').value, dailyRate: $('#f_dr').value, status: $('#f_status').value } }, 'Saved');
   closeDrawer();
 }
 async function resetPin(id) {
@@ -422,7 +459,7 @@ function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ ac
 /* ---------------- PAYROLL ---------------- */
 function pay() {
   const D = ST.D, b = ST.branch;
-  const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0));
+  const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0 || (D.v9[x.e.id] && Number(D.v9[x.e.id].net))));
   const sum = k => R.reduce((s, x) => s + x.r[k], 0);
   const missing = D.issues.filter(i => i.kind === 'Missing OUT').length;
   $('#main').innerHTML = `
@@ -431,35 +468,45 @@ function pay() {
     <div class="card kpi accent"><div class="l">NET payable · ${b === 'ALL' ? 'all branches' : esc(branchName(b))}</div><div class="v">${rs(sum('net'))}</div><div class="s">${esc(D.monthLabel)}</div></div>
     <div class="card kpi"><div class="l">Base pay</div><div class="v">${rs(sum('base'))}</div></div>
     <div class="card kpi"><div class="l">Deductions</div><div class="v">${rs(sum('dedT'))}</div></div>
-    <div class="card kpi"><div class="l">Additions</div><div class="v">${rs(sum('addT'))}</div></div></div>
+    <div class="card kpi"><div class="l">OT pay</div><div class="v">${rs(sum('otPay'))}</div></div>
+    <div class="card kpi"><div class="l">Additions</div><div class="v">${rs(sum('addT'))}</div></div>
+    ${D.hasV9 ? `<div class="card kpi"><div class="l">V9 NET · same filter</div><div class="v">${rs(R.reduce((s, x) => s + (x.v9 || 0), 0))}</div><div class="s">${R.filter(x => x.v9 !== null && x.v9 === x.r.net).length} of ${R.filter(x => x.v9 !== null).length} match</div></div>` : ''}</div>
   <div class="card" style="margin-top:14px">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Payroll · ${esc(D.monthLabel)}</h2><div class="sp"></div>
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
       <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button></div>
-    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th><th>Notes</th></tr></thead><tbody>
+    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">OT</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th>${D.hasV9 ? '<th class="num">V9 NET</th>' : ''}<th>Notes</th></tr></thead><tbody>
     ${R.map(({ e, r }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}</td><td>${e.payType}</td>
       <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
-      <td class="num">${r.eligible ? `<input class="mini" type="number" min="0" max="8" value="${r.creditDays}" onchange="setWO('${e.id}',this.value)" title="${r.creditSource}"> ${r.creditSource === 'auto' ? '<span class="tag t-mute">auto</span>' : ''}` : '<span class="muted">—</span>'}</td>
-      <td class="num">${rs(r.base)}</td><td class="num">${r.dedT ? rs(r.dedT) : '<span class="muted">—</span>'}</td><td class="num">${r.addT ? rs(r.addT) : '<span class="muted">—</span>'}</td>
+      <td class="num">${r.eligible ? `<input class="mini" type="number" min="0" max="8" value="${r.creditDays}" onchange="setWO('${e.id}',this.value)" title="${r.creditSource}"> ${r.creditSource === 'rule' ? '' : '<span class="tag t-mute">manual</span>'}` : '<span class="muted">—</span>'}</td>
+      <td class="num">${rs(r.base)}</td><td class="num">${r.otPay ? rs(r.otPay) : '<span class="muted">—</span>'}</td><td class="num">${r.dedT ? rs(r.dedT) : '<span class="muted">—</span>'}</td><td class="num">${r.addT ? rs(r.addT) : '<span class="muted">—</span>'}</td>
       <td class="num"><b style="${r.net < 0 ? 'color:var(--bad)' : ''}">${rs(r.net)}</b></td>
+      ${D.hasV9 ? `<td class="num">${x9(e.id, r.net)}</td>` : ''}
       <td>${e.status !== 'Active' && r.days ? '<span class="tag t-bad">Inactive but worked</span>' : ''}${r.net < 0 ? '<span class="tag t-bad">Negative</span>' : ''}${!e.hasPin && e.status === 'Active' ? '<span class="tag t-mute">no PIN</span>' : ''}</td></tr>`).join('')}
     </tbody></table></div></div>`;
+}
+function x9(id, net) {
+  const v = ST.D.v9[id];
+  if (!v) return net ? '<span class="tag t-bad">not in V9</span>' : '<span class="muted">—</span>';
+  const n = Number(v.net);
+  return n === net ? `<span class="tag t-ok">${rs(n)} ✓</span>` : `<span class="tag t-warn">${rs(n)}</span>`;
 }
 function setWO(id, v) { act({ action: 'setWeekOff', empId: id, month: ST.D.month, days: Number(v) }, 'Week-off days saved'); }
 function showCalc(id) {
   const D = ST.D, x = D.pay.find(p => p.e.id === id), e = x.e, r = x.r, sh = D.byEmp[id].inMonth;
   openDrawer(`<div class="row"><div><h2 style="margin:0">${esc(e.name)}</h2><div class="muted">${e.id} · ${esc(branchName(e.branch))} · ${e.payType} · ${e.status}</div></div><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
     <div class="steps">
-      <div class="step"><div>Shifts worked<div class="f">${sh.length} shifts, ${r.halfDays} under ${D.config.halfDayHrs} h counted as ½ day</div></div><b>${r.days} days</b></div>
+      <div class="step"><div>Shifts worked<div class="f">${sh.length} shifts, ${r.halfDays} of ${D.config.halfDayHrs} h or less counted as ½ day${sh.some(s => s.imported) ? ' · from V9 attendance' : ''}</div></div><b>${r.days} days</b></div>
       <div class="step"><div>Hours on shift</div><b>${r.workH.toFixed(2)} h</b></div>
-      <div class="step"><div>Rate per hour<div class="f">${rs(e.plan)} ÷ (${r.calDays} days × ${e.duty} h)</div></div><b>₹${r.rate.toFixed(2)}</b></div>
+      <div class="step"><div>Rate per hour<div class="f">${r.eligible ? rs(e.plan) + ' ÷ (' + r.calDays + ' days × ' + e.duty + ' h)' : 'daily rate ' + rs(e.dailyRate) + ' ÷ ' + e.duty + ' h (no paid week-off)'}</div></div><b>₹${r.rate.toFixed(2)}</b></div>
       ${e.payType === 'HOURLY' ? `<div class="step"><div>Paid week-off credit<div class="f">${r.creditDays} day(s) × ${e.duty} h · ${r.eligible ? r.creditSource : 'not eligible'}</div></div><b>${r.creditH} h</b></div>` : ''}
       <div class="step"><div>Base pay<div class="f">${r.basis}</div></div><b>${rs(r.base)}</b></div>
       ${r.ded.map(d => `<div class="step"><div>− ${esc(d.category)}<div class="f">${esc(d.note)}</div></div><b style="color:var(--bad)">−${rs(d.amount)}</b></div>`).join('')}
       ${r.add.map(d => `<div class="step"><div>+ ${esc(d.category)}<div class="f">${esc(d.note)}</div></div><b style="color:var(--ok)">+${rs(d.amount)}</b></div>`).join('')}
-      <div class="step total"><div><b>NET payable</b><div class="f">rounded to nearest ₹10</div></div><b style="font-size:18px">${rs(r.net)}</b></div></div>
+      ${r.otPay ? `<div class="step"><div>+ Overtime<div class="f">${r.otH.toFixed(2)} h beyond ${r.workDays} days × ${e.duty} h, × ₹${r.rate.toFixed(2)} × ${D.config.otMultiplier || 1}</div></div><b style="color:var(--ok)">+${rs(r.otPay)}</b></div>` : ''}
+      <div class="step total"><div><b>NET payable</b><div class="f">rounded to nearest ₹10${r.carry ? ' · ' + rs(r.carry) + ' carries forward to next month' : ''}${D.v9[e.id] ? ' · V9 had ' + rs(Number(D.v9[e.id].net)) : ''}</div></div><b style="font-size:18px">${rs(r.net)}</b></div></div>
     <h2 style="margin-top:18px">Shifts</h2><table><thead><tr><th>Date</th><th>IN</th><th>OUT</th><th>Store</th><th class="num">Hours</th></tr></thead><tbody>
-    ${sh.map(s => `<tr><td>${s.date.slice(8)} ${D.monthLabel.slice(0, 3)}</td><td>${s.in}</td><td>${s.out}</td><td>${esc(branchName(s.store))}</td><td class="num">${s.hours.toFixed(2)}${s.hours < D.config.halfDayHrs ? ' <span class="tag t-warn">½</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No shifts this month</td></tr>'}</tbody></table>`);
+    ${sh.map(s => `<tr><td>${s.date.slice(8)} ${D.monthLabel.slice(0, 3)}</td><td>${s.in}</td><td>${s.out}</td><td>${esc(branchName(s.store))}</td><td class="num">${s.hours.toFixed(2)}${s.hours <= D.config.halfDayHrs ? ' <span class="tag t-warn">½</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No shifts this month</td></tr>'}</tbody></table>`);
 }
 function csv(rows, name) {
   const t = rows.map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -474,8 +521,8 @@ function exportAttendance() {
   csv(rows, `BWC_Attendance_${D.month}.csv`);
 }
 function exportPayroll() {
-  const D = ST.D, rows = [['WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan', 'Duty Hrs', 'Days Worked', 'Hrs Worked', 'Week-off Days', 'Base Salary', 'Total Ded', 'Total Add', 'NET']];
-  D.pay.forEach(({ e, r }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, (r.workH + r.creditH).toFixed(2), r.creditDays, r.base.toFixed(2), r.dedT, r.addT, r.net]));
+  const D = ST.D, rows = [['WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan', 'Duty Hrs', 'Days Worked', 'Clocked Hrs', 'Week-off Days', 'Base Salary', 'OT Hrs', 'OT Pay', 'Total Ded', 'Total Add', 'NET', 'NET Payable', 'Carry Fwd', 'V9 NET']];
+  D.pay.forEach(({ e, r }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, r.workH.toFixed(2), r.creditDays, r.base.toFixed(2), r.otH.toFixed(2), r.otPay.toFixed(2), r.dedT, r.addT, r.net, r.payable, r.carry, D.v9[e.id] ? D.v9[e.id].net : '']));
   csv(rows, `BWC_Payroll_${D.month}.csv`);
 }
 
@@ -483,10 +530,23 @@ function exportPayroll() {
 function stores() {
   const D = ST.D;
   $('#main').innerHTML = `<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Stores &amp; geofence</h2><div class="sp"></div><button class="btn y" onclick="editStore(null)">+ Add store</button></div>
-    <p class="muted">Easiest way to set a location: open this page on a phone <b>inside the store</b>, tap Edit → "Use my current location", wait for ±20 m or better, and Save.</p>
-    <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Latitude</th><th>Longitude</th><th class="num">Radius</th><th>Active</th><th>Last change</th><th></th></tr></thead><tbody>
-    ${D.stores.map(s => `<tr><td>${s.code}</td><td><b>${esc(s.name)}</b></td><td>${s.lat === '' ? '<span class="tag t-bad">not set</span>' : s.lat}</td><td>${s.lng}</td><td class="num">${s.radiusM} m</td><td>${s.active}</td><td class="muted">${esc(s.updatedBy)} ${String(s.updatedAt).slice(0, 10)}</td>
-      <td><button class="btn" onclick="editStore('${s.code}')">Edit</button> ${s.lat !== '' ? `<a class="btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Map</a>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
+    <p class="muted">Managers capture each store once from the <b>manager app</b> (<a href="manager.html" target="_blank">heavencrescita.github.io/attendance/manager.html</a>): GPS ±30 m or better + live selfie with random gestures + outside and inside photos. A captured store is locked; unlock it here to let a manager redo it.</p>
+    <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Location</th><th class="num">Radius</th><th>Captured by</th><th>Photos</th><th>Active</th><th></th></tr></thead><tbody>
+    ${D.stores.map(s => { const c = (D.captures || []).filter(x => x.store === s.code).pop();
+      return `<tr><td>${s.code}</td><td><b>${esc(s.name)}</b></td><td>${s.lat === '' ? '<span class="tag t-bad">not set</span>' : `${s.lat}, ${s.lng}`}</td><td class="num">${s.radiusM} m</td>
+      <td>${s.capturedBy ? `${esc(s.capturedBy)}<div class="muted">${String(s.capturedAt).slice(0, 16).replace('T', ' ')}${c ? ' · ±' + c.accuracyM + ' m' : ''}</div>${c ? `<span class="tag ${/^VERIFIED/.test(c.status) ? 't-ok' : 't-warn'}">${esc(c.status)}</span>` : ''}` : s.lat !== '' ? '<span class="tag t-warn">typed in by ' + esc(s.updatedBy) + '</span>' : '<span class="muted">—</span>'}</td>
+      <td>${c ? `<button class="btn" onclick="capturePhotos('${s.code}')">View</button>` : '<span class="muted">—</span>'}</td><td>${s.active}</td>
+      <td><button class="btn" onclick="editStore('${s.code}')">Edit</button> ${s.locked === 'Yes' ? `<button class="btn r" onclick="unlockStore('${s.code}')">Unlock</button>` : ''} ${s.lat !== '' ? `<a class="btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Map</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+}
+function unlockStore(code) { if (confirmInline('Unlock this store so a manager can capture it again?')) act({ action: 'unlockStore', code }, 'Unlocked'); }
+async function capturePhotos(code) {
+  const D = ST.D, s = D.stores.find(x => x.code === code), c = (D.captures || []).filter(x => x.store === code).pop();
+  openDrawer(`<div class="row"><h2 style="margin:0">${esc(s.name)} · capture</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <p class="muted">${esc(c.name)} (${c.empId}) · ${c.time.slice(0, 16).replace('T', ' ')} · ±${c.accuracyM} m · ${esc(c.status)}</p>
+    ${[['selfieId', 'Live selfie (gesture frames)'], ['outsideId', 'Outside'], ['insideId', 'Inside']].map(([k, l]) => `<h2 style="margin-top:14px">${l}</h2><div id="cp_${k}" class="muted">Loading…</div>`).join('')}`);
+  for (const k of ['selfieId', 'outsideId', 'insideId']) {
+    try { $('#cp_' + k).innerHTML = `<img src="${await loadSelfie(c[k])}" style="width:100%;border-radius:12px">`; } catch (e) { $('#cp_' + k).textContent = e.message; }
+  }
 }
 function editStore(code) {
   const s = code ? ST.D.stores.find(x => x.code === code) : { code: '', name: '', lat: '', lng: '', radiusM: 50, active: 'Yes' };
