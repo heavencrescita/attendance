@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="theme-color" content="#0d0d0d">
 <meta name="robots" content="noindex">
-<title>BWC Store Setup</title>
+<title>BWC Managers</title>
 <style>
 :root{--yellow:#fff200;--black:#0d0d0d;--teal:#27bdbe;--bg:#f5f5f0;--card:#fff;--ink:#141414;--muted:#6b6b66;--line:#e2e2da;--ok:#1a7f37;--okbg:#e6f4ea;--warn:#8a5200;--warnbg:#fff4dc;--bad:#b4232b;--badbg:#fde8e8}
 *{box-sizing:border-box}
@@ -48,16 +48,41 @@ h2{font-size:19px;margin:0 0 6px}
 .err{background:var(--badbg);color:var(--bad);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;display:none}
 .okbox{background:var(--okbg);color:var(--ok);border-radius:12px;padding:16px;text-align:center}
 .hide{display:none}
+.home button{text-align:left;padding:16px 18px}
+.home button span{display:block;font-weight:500;font-size:13px;opacity:.8;margin-top:3px}
+.wk{display:flex;align-items:center;gap:8px;margin:10px 0}
+.wk button{width:auto;margin:0;padding:10px 14px;font-size:18px}
+.wk b{flex:1;text-align:center;font-size:15px}
+select,textarea,input.sm{width:100%;font-size:16px;padding:11px 12px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font-family:inherit}
+.day{border-top:1px solid var(--line);padding:12px 0 4px}
+.day h3{margin:0 0 6px;font-size:15px;display:flex;align-items:center}
+.day h3 span{flex:1}.day h3 a{font-size:13px;color:#0a6e6f;font-weight:700;cursor:pointer}
+.day.past{opacity:.55}
+.sh{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:#fff}
+.sh .who{flex:1}.sh .who b{display:block;font-size:15px}.sh .who small{color:var(--muted);font-size:12.5px}
+.sh .acts a{display:block;font-size:12.5px;color:#0a6e6f;font-weight:700;text-align:right;cursor:pointer;margin-top:4px}
+.t-bad{background:var(--badbg);color:var(--bad)}
+.fb{display:block;font-size:12.5px;color:var(--bad);margin-top:3px}
+.counts{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:9}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px;max-height:92vh;overflow:auto}
+.dchk{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:4px}
+.dchk label{margin:0;border:2px solid var(--line);border-radius:10px;text-align:center;padding:6px 0;font-size:12px;font-weight:700;cursor:pointer}
+.dchk input{display:none}.dchk label.on{background:var(--yellow);border-color:#000}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wa{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.wa b{flex:1;font-size:14px}.wa button{width:auto;margin:0;padding:9px 14px;font-size:14px;background:#25d366;color:#fff}
+.warn{background:var(--warnbg);color:var(--warn);border-radius:10px;padding:8px 10px;font-size:13px;margin-top:8px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin-top:10px}.kv b{font-weight:600}
 </style>
 </head>
 <body>
-<header><div class="logo">BWC</div><div><b>The Belgian Waffle Cafe</b><small>Manager · Store location setup</small></div></header>
+<header><div class="logo">BWC</div><div><b>The Belgian Waffle Cafe</b><small id="hsub">Managers</small></div></header>
 <main>
 
 <section id="s-login" class="card">
   <h2>Managers only</h2>
-  <p class="muted" style="margin:0">Capture each store's location once — GPS + your live selfie + a photo outside and inside the shop.<br>ஒவ்வொரு கடைக்கும் ஒரு முறை மட்டும்.</p>
+  <p class="muted" style="margin:0">Plan shifts for your stores, and set each store's location once.<br>மேலாளர்கள் மட்டும்.</p>
   <label>WAFF number</label>
   <div class="prefix"><b>WAFF-</b><input id="wid" inputmode="numeric" maxlength="4" autocomplete="off"></div>
   <label>PIN</label>
@@ -66,10 +91,33 @@ h2{font-size:19px;margin:0 0 6px}
   <div class="err" id="e-login"></div>
 </section>
 
+<section id="s-home" class="hide">
+  <div class="card home"><h2 id="h-hello"></h2>
+    <button class="y" onclick="openPlanner()">Shift planner<span id="h-plan">Plan shifts and see who accepted</span></button>
+    <button class="k" onclick="openSetup()">Store location setup<span>One-time GPS + photos for each store</span></button>
+    <button class="g" onclick="logout()">Log out</button>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">To punch your own attendance use the staff link: heavencrescita.github.io/attendance/</p></div>
+</section>
+
+<section id="s-plan" class="hide">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1;margin:0">Shift planner</h2><a onclick="goHome()" style="font-weight:700;color:#0a6e6f;cursor:pointer">‹ Back</a></div>
+    <div id="p-none" class="warn hide"></div>
+    <div id="p-main">
+      <label style="margin-top:10px">Store</label><select id="p-store" onchange="loadWeek()"></select>
+      <div class="wk"><button class="g" onclick="moveWeek(-7)">‹</button><b id="p-range"></b><button class="g" onclick="moveWeek(7)">›</button></div>
+      <div class="counts" id="p-counts"></div>
+      <div id="p-days"></div>
+      <div id="p-wa"></div>
+    </div>
+    <div class="err" id="e-plan"></div>
+  </div>
+</section>
+
 <section id="s-stores" class="hide">
   <div class="card"><h2 id="hello"></h2><p class="muted" style="margin:0">Go to the store and stand at the shop entrance before you start. Each store can be captured only once; ask the admin to unlock it if it needs redoing.</p>
     <div id="storeList"></div>
-    <button class="g" onclick="logout()">Log out</button></div>
+    <button class="g" onclick="goHome()">Back</button></div>
 </section>
 
 <section id="s-wiz" class="hide">
@@ -239,7 +287,7 @@ const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5
 const $ = id => document.getElementById(id);
 let M = {}, W = {}, cam = null, watch = null;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function show(id) { ['s-login', 's-stores', 's-wiz'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
+function show(id) { ['s-login', 's-home', 's-plan', 's-stores', 's-wiz'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 async function api(body) { const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) }); const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j; }
 
@@ -248,8 +296,8 @@ async function login() {
   try {
     const id = $('wid').value.replace(/\D/g, ''), pin = $('pin').value.replace(/\D/g, '');
     const r = await api({ action: 'managerStatus', id, pin });
-    M = { id: r.id, pin, name: r.name, stores: r.stores, ch: r.challenge, maxAcc: r.maxAccM || 30, chAt: Date.now() };
-    renderStores(); show('s-stores'); Live.load().catch(() => {});
+    M = { id: r.id, pin, name: r.name, stores: r.stores, ch: r.challenge, maxAcc: r.maxAccM || 30, chAt: Date.now(), planStores: r.planStores || [] };
+    goHome();
   } catch (e) { err('e-login', e.message); } finally { $('b-login').disabled = false; }
 }
 function renderStores() {
@@ -345,6 +393,130 @@ async function submit() {
 }
 function stopAll() { if (cam) { Live.stop(cam.stream); cam = null; } if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; } }
 async function backToStores() { stopAll(); $('b-cancel').classList.remove('hide'); try { await relogin(); } catch (e) {} renderStores(); show('s-stores'); }
+function goHome() {
+  stopAll(); $('hsub').textContent = 'Managers'; $('h-hello').textContent = 'Hi ' + M.name.split(' ')[0];
+  $('h-plan').textContent = M.planStores.length ? 'Your stores: ' + M.planStores.map(s => s.name).join(', ') : 'No stores assigned yet — ask the admin';
+  show('s-home');
+}
+function openSetup() { $('hsub').textContent = 'Store location setup'; renderStores(); show('s-stores'); Live.load().catch(() => {}); }
+
+/* ---------- shift planner ---------- */
+const P = { from: null, data: null };
+const DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dObj = ymd => new Date(ymd + 'T12:00:00');
+const ymdOf = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const addD = (ymd, n) => { const d = dObj(ymd); d.setDate(d.getDate() + n); return ymdOf(d); };
+const dLabel = ymd => { const d = dObj(ymd); return DN[d.getDay()] + ' ' + d.getDate() + ' ' + MN[d.getMonth()]; };
+const STATUS = { PENDING: ['Waiting', 't-warn'], ACCEPTED: ['Accepted', 't-ok'], REJECTED: ['Rejected', 't-bad'] };
+function openPlanner() {
+  $('hsub').textContent = 'Shift planner'; err('e-plan'); show('s-plan');
+  const none = !M.planStores.length;
+  $('p-none').classList.toggle('hide', !none); $('p-main').classList.toggle('hide', none);
+  if (none) { $('p-none').textContent = 'No stores are assigned to you for planning yet. Ask the admin to tick your stores in Admin → Employees → Edit.'; return; }
+  $('p-store').innerHTML = M.planStores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
+  const t = new Date(); const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7)); P.from = ymdOf(mon);
+  loadWeek();
+}
+function moveWeek(n) { P.from = addD(P.from, n); loadWeek(); }
+async function loadWeek() {
+  err('e-plan'); $('p-range').textContent = dLabel(P.from) + ' – ' + dLabel(addD(P.from, 6)); $('p-days').innerHTML = '<p class="muted">Loading…</p>'; $('p-wa').innerHTML = '';
+  try { P.data = await api({ action: 'planWeek', id: M.id, pin: M.pin, from: P.from, days: 7 }); renderWeek(); }
+  catch (e) { $('p-days').innerHTML = ''; err('e-plan', e.message); }
+}
+function weekShifts() { const st = $('p-store').value; return P.data.shifts.filter(s => s.store === st); }
+function renderWeek() {
+  const list = weekShifts(); const today = P.data.today;
+  const c = { PENDING: 0, ACCEPTED: 0, REJECTED: 0 }; list.forEach(s => c[s.status] = (c[s.status] || 0) + 1);
+  $('p-counts').innerHTML = `<span class="tag t-mute">${list.length} shifts</span><span class="tag t-warn">${c.PENDING} waiting</span><span class="tag t-ok">${c.ACCEPTED} accepted</span><span class="tag t-bad">${c.REJECTED} rejected</span>`;
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const day = addD(P.from, i), past = day < today;
+    const items = list.filter(s => s.date === day).sort((a, b) => a.start.localeCompare(b.start));
+    html += `<div class="day ${past ? 'past' : ''}"><h3><span>${dLabel(day)}${day === today ? ' · today' : ''}</span>${past ? '' : `<a onclick="editShift(null,'${day}')">+ Add shift</a>`}</h3>`;
+    html += items.map(s => {
+      const [lab, cls] = STATUS[s.status] || [s.status, 't-mute'];
+      return `<div class="sh"><div class="who"><b>${esc(s.name)}</b><small>${s.start}–${s.end} · ${s.hours} h${s.note ? ' · ' + esc(s.note) : ''}</small>${s.status === 'REJECTED' && s.feedback ? `<span class="fb">“${esc(s.feedback)}”</span>` : ''}</div>
+        <div class="acts"><span class="tag ${cls}">${lab}</span>${past ? '' : `<a onclick="editShift('${s.shiftId}')">Edit</a><a onclick="cancelShift('${s.shiftId}')">Remove</a>`}</div></div>`;
+    }).join('') || (past ? '' : '<div class="muted" style="font-size:13px;padding:2px 0 6px">No shifts</div>');
+    html += '</div>';
+  }
+  $('p-days').innerHTML = html;
+  renderWa(list);
+}
+function renderWa(list) {
+  const by = {}; list.filter(s => s.date >= P.data.today && s.status !== 'REJECTED').forEach(s => (by[s.empId] = by[s.empId] || []).push(s));
+  const ids = Object.keys(by);
+  if (!ids.length) { $('p-wa').innerHTML = ''; return; }
+  $('p-wa').innerHTML = `<h3 style="margin:16px 0 4px;font-size:15px">Tell your team on WhatsApp</h3><p class="muted" style="font-size:13px;margin:0 0 6px">Opens WhatsApp with their shifts written out — pick the person and send.</p>` +
+    ids.map(id => { const s = by[id]; const sent = s.every(x => x.notifiedAt);
+      return `<div class="wa"><b>${esc(s[0].name)} <small class="muted" style="font-weight:400">${s.length} shift${s.length > 1 ? 's' : ''}${sent ? ' · sent' : ''}</small></b><button onclick="sendWa('${id}')">${sent ? 'Send again' : 'WhatsApp'}</button></div>`; }).join('');
+}
+function sendWa(empId) {
+  const st = M.planStores.find(s => s.code === $('p-store').value);
+  const s = weekShifts().filter(x => x.empId === empId && x.date >= P.data.today && x.status !== 'REJECTED').sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const first = s[0].name.split(' ')[0];
+  const txt = `Hi ${first}, your BWC shifts at ${st.name}:\n` + s.map(x => `• ${dLabel(x.date)}  ${x.start}–${x.end}`).join('\n') +
+    `\n\nPlease Accept or Reject each shift in the BWC app (WAFF number + PIN):\nhttps://heavencrescita.github.io/attendance/\nBWC செயலியில் ஏற்கவும் / மறுக்கவும்.\n— ${M.name}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  api({ action: 'planNotify', id: M.id, pin: M.pin, shiftIds: s.map(x => x.shiftId) }).then(() => { s.forEach(x => x.notifiedAt = 'now'); renderWa(weekShifts()); }).catch(() => {});
+}
+function editShift(shiftId, day) {
+  const s = shiftId ? P.data.shifts.find(x => x.shiftId === shiftId) : null;
+  const st = $('p-store').value; day = s ? s.date : day;
+  const emps = P.data.employees.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const opt = e => `<option value="${e.id}" ${s && s.empId === e.id ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`;
+  const here = emps.filter(e => e.branch === st), other = emps.filter(e => e.branch !== st);
+  const last = JSON.parse(localStorageGet('bwcLastTimes') || '{"start":"09:00","end":"18:00"}');
+  const days = []; for (let i = 0; i < 7; i++) { const d = addD(P.from, i); if (d >= P.data.today) days.push(d); }
+  const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'ov';
+  ov.innerHTML = `<div class="sheet"><h2>${s ? 'Edit shift' : 'Add shift'}</h2>
+    <label>Employee</label><select id="f-emp" onchange="clashCheck()"><option value="">Choose…</option><optgroup label="This store">${here.map(opt).join('')}</optgroup><optgroup label="Other stores">${other.map(e => opt(e).replace('</option>', ' · ' + esc(e.branchName) + '</option>')).join('')}</optgroup></select>
+    <div class="two"><div><label>Start</label><input class="sm" id="f-start" type="time" value="${s ? s.start : last.start}" onchange="clashCheck()"></div><div><label>End</label><input class="sm" id="f-end" type="time" value="${s ? s.end : last.end}" onchange="clashCheck()"></div></div>
+    <div class="muted" id="f-dur" style="font-size:13px;margin-top:6px"></div>
+    <label>${s ? 'Day' : 'Days <span>tap every day this person works this week</span>'}</label>
+    <div class="dchk">${(s ? [day] : days).map(d => `<label class="${d === day ? 'on' : ''}"><input type="checkbox" value="${d}" ${d === day ? 'checked' : ''} ${s ? 'disabled' : ''} onchange="this.parentNode.classList.toggle('on',this.checked);clashCheck()">${DN[dObj(d).getDay()]}<br>${dObj(d).getDate()}</label>`).join('')}</div>
+    <label>Note <span>optional — e.g. opening duty, stock count</span></label><input class="sm" id="f-note" maxlength="200" value="${s ? esc(s.note) : ''}">
+    <div id="f-warn"></div>
+    ${s && s.status !== 'PENDING' ? '<div class="warn">Saving a change sends this shift back to the employee to accept again.</div>' : ''}
+    <div class="err" id="e-f"></div>
+    <button class="y" id="f-save" onclick="saveShift('${s ? s.shiftId : ''}')">${s ? 'Save change' : 'Save and send to employee'}</button>
+    <button class="g" onclick="document.getElementById('ov').remove()">Cancel</button></div>`;
+  document.body.appendChild(ov); clashCheck();
+}
+function localStorageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+const mins = t => { const m = /^(\d\d):(\d\d)$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
+function spanOf(day, a, b) { const base = Math.round(dObj(day).getTime() / 60000) - 720; const dur = b > a ? b - a : b + 1440 - a; return [base + a, base + a + dur]; }
+function clashCheck() {
+  const a = mins($('f-start').value), b = mins($('f-end').value);
+  const dur = a === null || b === null ? null : (b > a ? b - a : b + 1440 - a) / 60;
+  $('f-dur').textContent = dur === null ? '' : dur.toFixed(2).replace(/\.?0+$/, '') + ' hours' + (b <= a ? ' · ends next morning' : '') + (dur < 1 || dur > 16 ? ' — must be 1 to 16 hours' : '');
+  const emp = $('f-emp').value; const box = $('f-warn'); box.innerHTML = '';
+  if (!emp || dur === null) return;
+  const days = [...document.querySelectorAll('.dchk input')].filter(x => x.checked).map(x => x.value);
+  const editing = (document.getElementById('f-save').getAttribute('onclick').match(/'([^']*)'/) || [])[1];
+  const others = P.data.shifts.filter(s => s.empId === emp && s.shiftId !== editing && s.status !== 'REJECTED').map(s => ({ d: s.date, s: s.start, e: s.end, w: 'here' }))
+    .concat(P.data.busy.filter(s => s.empId === emp).map(s => ({ d: s.date, s: s.start, e: s.end, w: s.store })));
+  const msgs = [];
+  days.forEach(d => { const sp = spanOf(d, a, b); others.forEach(o => { const op = spanOf(o.d, mins(o.s), mins(o.e)); if (sp[0] < op[1] && op[0] < sp[1]) msgs.push(`${dLabel(o.d)} ${o.s}–${o.e}${o.w === 'here' ? '' : ' at ' + o.w}`); }); });
+  if (msgs.length) box.innerHTML = `<div class="warn">Already working: ${esc(msgs.join(', '))}. Change the time or day.</div>`;
+}
+async function saveShift(shiftId) {
+  err('e-f'); const emp = $('f-emp').value, start = $('f-start').value, end = $('f-end').value, note = $('f-note').value.trim();
+  const days = [...document.querySelectorAll('.dchk input')].filter(x => x.checked).map(x => x.value);
+  if (!emp) return err('e-f', 'Choose the employee'); if (!start || !end) return err('e-f', 'Enter start and end time'); if (!days.length) return err('e-f', 'Tick at least one day');
+  const store = $('p-store').value; $('f-save').disabled = true;
+  try {
+    await api({ action: 'planSave', id: M.id, pin: M.pin, shifts: days.map(date => ({ shiftId: shiftId || undefined, store, empId: emp, date, start, end, note })) });
+    localStorageSet('bwcLastTimes', JSON.stringify({ start, end }));
+    $('ov').remove(); loadWeek();
+  } catch (e) { err('e-f', e.message); $('f-save').disabled = false; }
+}
+async function cancelShift(id) {
+  const s = P.data.shifts.find(x => x.shiftId === id);
+  if (!confirm(`Remove ${s.name}'s shift on ${dLabel(s.date)} ${s.start}–${s.end}?`)) return;
+  try { await api({ action: 'planCancel', id: M.id, pin: M.pin, shiftId: id }); loadWeek(); } catch (e) { err('e-plan', e.message); }
+}
 function logout() { stopAll(); M = {}; $('wid').value = ''; $('pin').value = ''; show('s-login'); }
 </script>
 </body>

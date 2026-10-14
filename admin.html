@@ -31,6 +31,7 @@ main{max-width:1280px;margin:0 auto;padding:20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
 .kpi .l{color:var(--muted);font-size:12px;font-weight:500}.kpi .v{font-size:26px;font-weight:800;margin-top:4px}.kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
 .kpi.accent{border-left:5px solid var(--teal)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}.chip input{width:auto;margin:0}
 h2{font-size:15px;margin:0 0 12px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp{flex:1}
 table{width:100%;border-collapse:collapse}
@@ -225,16 +226,41 @@ function derive() {
   D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
   D.notInV9 = D.hasV9 ? D.pay.filter(x => x.v9 === null && x.r.net !== 0) : [];
   D.v9Match = D.pay.filter(x => x.v9 !== null && x.v9 === x.r.net).length;
+  derivePlan();
   const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
   if (!ST.day || ST.day.slice(0, 7) !== D.month) ST.day = today.slice(0, 7) === D.month ? today : D.month + '-01';
 }
 const branchName = c => (ST.D.storeName[c] || c);
+const LATE_GRACE_MIN = 10;
+// Planned vs actual (report only — pay is still calculated from punches)
+function derivePlan() {
+  const D = ST.D, now = Date.now();
+  const plan = (D.shifts || []).filter(s => s.status !== 'CANCELLED');
+  const ins = D.punches.filter(p => p.type === 'IN' && p.status !== 'REJECTED');
+  const used = new Set();
+  const rows = plan.map(s => {
+    const st = Date.parse(s.date + 'T' + s.start + ':00+05:30'), dur = Number(s.hours) * 3600000, en = st + dur;
+    const cand = ins.filter(p => p.empId === s.empId && !used.has(p.punchId) && Number(p.epoch) > st - 4 * 3600000 && Number(p.epoch) < st + 8 * 3600000)
+      .sort((a, b) => Math.abs(a.epoch - st) - Math.abs(b.epoch - st))[0];
+    let res, late = 0, out = '';
+    if (cand) {
+      used.add(cand.punchId); late = Math.round((Number(cand.epoch) - st) / 60000);
+      res = late > LATE_GRACE_MIN ? 'Late' : 'On time';
+      const sh = (D.byEmp[s.empId] || { shifts: [] }).shifts.find(x => x.inPunch && x.inPunch.punchId === cand.punchId); out = sh ? sh.out : '';
+    } else res = st > now ? 'Upcoming' : en > now ? 'Not in yet' : 'No-show';
+    return { s, st, inPunch: cand, late, out, res };
+  }).sort((a, b) => a.st - b.st);
+  const planned = new Set(plan.map(s => s.empId + '|' + s.date));
+  const planStores = new Set(plan.map(s => s.store));
+  const unplanned = ins.filter(p => !used.has(p.punchId) && planStores.has(p.store) && !planned.has(p.empId + '|' + String(p.time).slice(0, 10)) && String(p.time).slice(0, 7) === D.month);
+  D.plan = { rows, unplanned };
+}
 
 /* ---------------- SHELL ---------------- */
 function render() {
   const D = ST.D, isAdmin = D.role === 'admin';
   const tabs = [['overview', 'Overview'], ['daily', 'Daily attendance'], ['flags', 'Review', D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length],
-    ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll']];
+    ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll']];
   if (isAdmin) tabs.push(['stores', 'Stores'], ['users', 'Users']);
   $('#app').innerHTML = `
   <div class="top"><div class="logo">BWC</div><div><h1>The Belgian Waffle Cafe</h1><div class="sub">Attendance &amp; payroll admin</div></div><div class="sp"></div>
@@ -242,13 +268,54 @@ function render() {
     <button class="pill" onclick="pwDialog()"><b>${esc(D.user)}</b> · ${D.role}</button><button class="pill" onclick="logout()">Sign out</button></div>
   <nav>${tabs.map(([k, l, n]) => `<button class="${ST.tab === k ? 'on' : ''}" onclick="go('${k}')">${l}${n ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</nav>
   <main id="main"></main>`;
-  ({ overview, daily, flags, emps, regs, pay, stores, users })[ST.tab]();
+  ({ overview, daily, flags, shifts: shiftPlan, emps, regs, pay, stores, users })[ST.tab]();
 }
 function go(t) { ST.tab = t; render(); window.scrollTo(0, 0); }
 function closeDrawer() { $('#drawer').classList.remove('on'); }
 function openDrawer(html) { $('#panel').innerHTML = html; $('#drawer').classList.add('on'); }
 const branchSelect = (v, on) => `<select onchange="${on}"><option value="ALL">All branches</option>${branchCodes().map(c => `<option value="${c}" ${c === v ? 'selected' : ''}>${esc(branchName(c))}</option>`).join('')}</select>`;
 function branchCodes() { return [...new Set(ST.D.employees.map(e => e.branch))].sort((a, b) => branchName(a).localeCompare(branchName(b))); }
+
+/* ---------------- SHIFT PLAN ---------------- */
+function shiftPlan() {
+  const D = ST.D, b = ST.planStore || 'ALL', f = ST.planFilter || 'ALL';
+  const inStore = r => b === 'ALL' || r.s.store === b;
+  const rows = D.plan.rows.filter(inStore);
+  const cnt = k => rows.filter(k).length;
+  const ack = { PENDING: ['Waiting', 't-warn'], ACCEPTED: ['Accepted', 't-ok'], REJECTED: ['Rejected', 't-bad'] };
+  const resTag = r => r.res === 'Late' ? `<span class="tag t-bad">Late ${r.late} min</span>` : r.res === 'No-show' ? '<span class="tag t-bad">No-show</span>' : r.res === 'On time' ? '<span class="tag t-ok">On time</span>' : `<span class="tag t-mute">${r.res}</span>`;
+  const filt = { ALL: () => true, REJECTED: r => r.s.status === 'REJECTED', PENDING: r => r.s.status === 'PENDING', LATE: r => r.res === 'Late', NOSHOW: r => r.res === 'No-show' }[f];
+  const stores = [...new Set(D.plan.rows.map(r => r.s.store))].sort((x, y) => branchName(x).localeCompare(branchName(y)));
+  const un = D.plan.unplanned.filter(p => b === 'ALL' || p.store === b);
+  const mgrs = D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active');
+  $('#main').innerHTML = `<div class="card">
+    <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Shift plan vs actual — ${esc(D.monthLabel)}</h2><div class="sp"></div>
+      <div style="width:200px"><select onchange="ST.planStore=this.value;render()"><option value="ALL">All stores</option>${stores.map(c => `<option value="${c}" ${c === b ? 'selected' : ''}>${esc(branchName(c))}</option>`).join('')}</select></div></div>
+    <p class="muted">Managers plan shifts in the manager app; employees accept or reject them in the attendance app. This compares the plan with real punches — <b>pay is not affected</b>. Late = punched IN more than ${LATE_GRACE_MIN} min after the planned start.</p>
+    <div class="grid kpis">
+      <div class="card kpi"><div class="l">Planned shifts</div><div class="v">${rows.length}</div></div>
+      <div class="card kpi"><div class="l">Accepted</div><div class="v">${cnt(r => r.s.status === 'ACCEPTED')}</div><div class="s">${cnt(r => r.s.status === 'PENDING')} waiting for reply</div></div>
+      <div class="card kpi"><div class="l">Rejected</div><div class="v">${cnt(r => r.s.status === 'REJECTED')}</div></div>
+      <div class="card kpi"><div class="l">Late arrivals</div><div class="v">${cnt(r => r.res === 'Late')}</div></div>
+      <div class="card kpi"><div class="l">No-shows</div><div class="v">${cnt(r => r.res === 'No-show' && r.s.status !== 'REJECTED')}</div></div>
+      <div class="card kpi"><div class="l">Worked without a plan</div><div class="v">${un.length}</div><div class="s">at stores that use planning</div></div>
+    </div>
+    ${D.plan.rows.length ? '' : `<div class="note">No shifts planned for this month yet. Assign stores to managers in <b>Employees → Edit → Plans shifts for</b>, then they plan from the manager app.</div>`}
+    <div class="row" style="gap:6px;margin:14px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
+    <div class="scroll"><table><thead><tr><th>Date</th><th>Store</th><th>Employee</th><th>Planned</th><th>Reply</th><th>Actual IN–OUT</th><th>Result</th><th>Planned by</th></tr></thead><tbody>
+    ${rows.filter(filt).map(r => { const [l, c] = ack[r.s.status] || [r.s.status, 't-mute'];
+      return `<tr><td>${esc(r.s.date)}</td><td>${esc(branchName(r.s.store))}</td><td><b>${esc(r.s.name)}</b> <span class="muted">${r.s.empId}</span></td><td>${r.s.start}–${r.s.end}${r.s.note ? `<div class="muted">${esc(r.s.note)}</div>` : ''}</td>
+        <td><span class="tag ${c}">${l}</span>${r.s.feedback ? `<div class="muted" style="max-width:220px">“${esc(r.s.feedback)}”</div>` : ''}</td>
+        <td>${r.inPunch ? esc(String(r.inPunch.time).slice(11, 16)) + (r.out ? '–' + esc(r.out) : ' (still in)') + (r.inPunch.status === 'FLAGGED' ? ' <span class="tag t-warn">review</span>' : '') : '—'}</td>
+        <td>${resTag(r)}</td><td class="muted">${esc(String(r.s.plannedBy || '').split(' ').slice(1).join(' ') || r.s.plannedBy)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted">Nothing here</td></tr>'}
+    </tbody></table></div></div>
+    ${un.length ? `<div class="card"><h2>Worked without a planned shift (${un.length})</h2><p class="muted">Punched IN on a day they had no planned shift, at a store that uses planning.</p>
+      <div class="scroll"><table><thead><tr><th>Date</th><th>Employee</th><th>Store</th><th>IN</th></tr></thead><tbody>
+      ${un.map(p => `<tr><td>${esc(String(p.time).slice(0, 10))}</td><td><b>${esc(p.name)}</b> <span class="muted">${p.empId}</span></td><td>${esc(branchName(p.store))}</td><td>${esc(String(p.time).slice(11, 16))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+    <div class="card"><h2>Who plans which stores</h2><div class="scroll"><table><thead><tr><th>Manager</th><th>Plans shifts for</th><th></th></tr></thead><tbody>
+      ${mgrs.map(e => `<tr><td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td><td>${String(e.mgrStores || '').split(',').filter(Boolean).map(c => esc(branchName(c))).join(', ') || '<span class="tag t-bad">none</span>'}</td><td><button class="btn" onclick="editEmp('${e.id}')">Edit</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+}
 
 /* ---------------- OVERVIEW ---------------- */
 function overview() {
@@ -403,12 +470,15 @@ function editEmp(id) {
       <label>Paid week-offs / month<input type="number" id="f_wod" value="${e.woDays === '' || e.woDays == null ? 4 : e.woDays}"></label>
       <label>Daily rate (₹, if no paid week-off)<input type="number" id="f_dr" value="${Number(e.dailyRate || 0).toFixed(2)}"></label>
       <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
-    </div><p class="muted">Every change is written to the Audit sheet (who, when, old → new).</p>
+    </div>
+    <div style="margin-top:12px"><b>Plans shifts for</b> <span class="muted">(managers only — needs “Can punch at any store” = Yes)</span>
+      <div class="chips" id="f_mgr">${D.stores.filter(s => s.active === 'Yes').map(s => { const on = String(e.mgrStores || '').split(',').includes(s.code); return `<label class="chip"><input type="checkbox" value="${s.code}" ${on ? 'checked' : ''}> ${esc(s.name)}</label>`; }).join('')}</div></div><p class="muted">Every change is written to the Audit sheet (who, when, old → new).</p>
     <button class="btn y" onclick="saveEmp(${id ? 'false' : 'true'})">Save</button>`);
 }
 async function saveEmp(isNew) {
   await act({ action: 'saveEmployee', isNew, employee: { id: $('#f_id').value, name: $('#f_name').value, branch: $('#f_branch').value, roaming: $('#f_roam').value,
-    payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, woDays: $('#f_wod').value, dailyRate: $('#f_dr').value, status: $('#f_status').value } }, 'Saved');
+    payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, woDays: $('#f_wod').value, dailyRate: $('#f_dr').value, status: $('#f_status').value,
+    mgrStores: [...document.querySelectorAll('#f_mgr input:checked')].map(x => x.value).join(',') } }, 'Saved');
   closeDrawer();
 }
 async function resetPin(id) {

@@ -49,6 +49,17 @@ button:disabled{opacity:.45}
 .hide{display:none}
 .foot{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
 .strip{width:100%;border-radius:10px;margin-top:12px}
+.shc h3{margin:0 0 2px;font-size:17px}
+.sitem{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px}
+.sitem .row{display:flex;align-items:center;gap:8px}.sitem .row b{flex:1;font-size:16px}
+.sitem small{color:var(--muted);font-size:13px}
+.tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.t-ok{background:var(--okbg);color:var(--ok)}.t-warn{background:var(--warnbg);color:var(--warn)}.t-bad{background:var(--badbg);color:var(--bad)}
+.ans{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ans button{margin-top:10px;padding:12px;font-size:16px}
+.acc{background:var(--ok);color:#fff}.acc small{color:#e6f4ea;opacity:1}.rej{background:#fff;color:var(--bad);border:2px solid var(--bad)}
+textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line);border-radius:12px;margin-top:8px;font-family:inherit}
+.chg{font-size:13px;color:#0a6e6f;font-weight:700;cursor:pointer;margin-top:6px;display:block}
+.shnote{margin-top:8px;padding:9px 12px;border-radius:10px;background:var(--warnbg);color:var(--warn);font-size:14px;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
@@ -68,6 +79,7 @@ button:disabled{opacity:.45}
   <div class="card">
     <p class="hello" id="hello"></p>
     <div class="state" id="state"></div>
+    <div class="shnote hide" id="shnote" onclick="document.getElementById('shiftCard').scrollIntoView({behavior:'smooth'})"></div>
     <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval" id="oval"></div>
       <div class="prompt" id="prompt"><span class="stp" id="p-step"></span><div id="p-en"></div><small id="p-ta"></small></div></div>
     <div class="gps"><span class="dot wait" id="gdot"></span><span id="gtxt">Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது</span></div>
@@ -75,6 +87,7 @@ button:disabled{opacity:.45}
     <button class="g" onclick="logout()">Cancel<small>ரத்து செய்</small></button>
     <div class="err" id="e-punch"></div>
   </div>
+  <div class="card shc hide" id="shiftCard"></div>
   <p class="foot">You will be asked to do 2 quick actions on camera (blink, smile…). Photos from the gallery cannot be used.<br>கேமராவில் 2 செயல்களைச் செய்யச் சொல்லப்படும்.</p>
 </section>
 
@@ -232,6 +245,42 @@ async function api(body) {
   return j;
 }
 
+/* ---------- planned shifts: accept / reject ---------- */
+const SH = { list: [], open: null };
+const DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dLab = ymd => { const d = new Date(ymd + 'T12:00:00'); return DN[d.getDay()] + ' ' + d.getDate() + ' ' + MN[d.getMonth()]; };
+const escH = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function loadShifts() {
+  try { const r = await api({ action: 'staffShifts', id: S.id, pin: S.pin }); SH.list = r.shifts.filter(s => s.canAnswer); SH.open = null; renderShifts(); } catch (e) {}
+}
+function renderShifts() {
+  const box = $('shiftCard'); const L = SH.list;
+  const pend = L.filter(s => s.status === 'PENDING').length;
+  $('shnote').classList.toggle('hide', !pend); $('shnote').textContent = pend + ' planned shift' + (pend > 1 ? 's need' : ' needs') + ' your reply — scroll down ↓ · பதில் அளிக்கவும்';
+  if (!L.length) { box.classList.add('hide'); return; }
+  box.classList.remove('hide');
+  box.innerHTML = `<h3>Your shifts${pend ? ` · <span style="color:var(--warn)">${pend} need your reply</span>` : ''}</h3><div class="muted" style="font-size:13px">உங்கள் ஷிஃப்ட்கள் — ஏற்கவும் அல்லது மறுக்கவும்</div>` +
+    L.map(s => {
+      const tag = s.status === 'ACCEPTED' ? '<span class="tag t-ok">Accepted</span>' : s.status === 'REJECTED' ? '<span class="tag t-bad">Rejected</span>' : '<span class="tag t-warn">Reply needed</span>';
+      const open = SH.open === s.shiftId;
+      let body = '';
+      if (s.status === 'PENDING' || open) {
+        body = open && SH.mode === 'REJECT'
+          ? `<textarea id="fb" rows="2" maxlength="300" placeholder="Why can't you work this shift? · காரணம்"></textarea><div class="ans"><button class="g" onclick="SH.open=null;renderShifts()">Back</button><button class="rej" onclick="answer('${s.shiftId}','REJECT')">Send reject</button></div>`
+          : `<div class="ans"><button class="acc" onclick="answer('${s.shiftId}','ACCEPT')">Accept<small>ஏற்கிறேன்</small></button><button class="rej" onclick="SH.open='${s.shiftId}';SH.mode='REJECT';renderShifts();document.getElementById('fb').focus()">Reject<small>மறுக்கிறேன்</small></button></div>`;
+      } else body = `${s.status === 'REJECTED' && s.feedback ? `<br><small>Your reason: “${escH(s.feedback)}”</small><br>` : ''}<span class="chg" onclick="SH.open='${s.shiftId}';SH.mode='';renderShifts()">Change my answer</span>`;
+      return `<div class="sitem"><div class="row"><b>${dLab(s.date)} · ${s.start}–${s.end}</b>${tag}</div><small>${escH(s.store)} · ${s.hours} h${s.note ? ' · ' + escH(s.note) : ''}</small>${body}<div class="err" id="e-${s.shiftId}"></div></div>`;
+    }).join('');
+}
+async function answer(id, ans) {
+  const fb = ans === 'REJECT' ? (($('fb') || {}).value || '').trim() : '';
+  if (ans === 'REJECT' && fb.length < 3) return err('e-' + id, 'Please write a reason · காரணத்தை எழுதவும்');
+  try {
+    const r = await api({ action: 'staffRespond', id: S.id, pin: S.pin, shiftId: id, answer: ans, feedback: fb });
+    const s = SH.list.find(x => x.shiftId === id); s.status = r.status; s.feedback = fb; SH.open = null; renderShifts();
+  } catch (e) { err('e-' + id, e.message); }
+}
+
 async function login() {
   err('e-login');
   const id = $('wid').value.replace(/\D/g, ''); const pin = $('pin').value.replace(/\D/g, '');
@@ -249,6 +298,7 @@ async function login() {
       : `You are not punched in. Start your shift.<br><span class="muted">பணியைத் தொடங்க வருகையைப் பதிவு செய்யவும்</span>`;
     $('b-punch').innerHTML = (st.next === 'OUT' ? 'Start face check · Punch OUT' : 'Start face check · Punch IN') + '<small>முக சரிபார்ப்பைத் தொடங்கவும்</small>';
     show('s-punch'); startGps(); startCam(); Live.load().catch(() => {});   // start downloading the face model early
+    loadShifts();
   } catch (e) { err('e-login', e.message); }
   finally { $('b-login').disabled = false; }
 }
@@ -326,7 +376,7 @@ function stopDevices() {
   if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; }
 }
 function logout() {
-  stopDevices(); clearInterval(autoTimer); S = {};
+  stopDevices(); clearInterval(autoTimer); S = {}; SH.list = []; $('shiftCard').classList.add('hide'); $('shiftCard').innerHTML = ''; $('shnote').classList.add('hide');
   $('wid').value = ''; $('pin').value = ''; err('e-login'); err('e-punch'); $('video').srcObject = null; $('prompt').style.display = 'none';
   $('b-punch').onclick = startCheck;
   show('s-login');
