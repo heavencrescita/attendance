@@ -31,6 +31,7 @@ main{max-width:1280px;margin:0 auto;padding:20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
 .kpi .l{color:var(--muted);font-size:12px;font-weight:500}.kpi .v{font-size:26px;font-weight:800;margin-top:4px}.kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
 .kpi.accent{border-left:5px solid var(--teal)}
+.matrix th.c,.matrix td.c{text-align:center;padding:6px 4px}.matrix th.c{font-size:11px;max-width:80px;white-space:normal}.matrix input{width:18px;height:18px}.matrix tr.sum td{border-top:2px solid var(--line);font-size:12px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.chip{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}.chip input{width:auto;margin:0}
 h2{font-size:15px;margin:0 0 12px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp{flex:1}
@@ -300,7 +301,7 @@ function shiftPlan() {
       <div class="card kpi"><div class="l">No-shows</div><div class="v">${cnt(r => r.res === 'No-show' && r.s.status !== 'REJECTED')}</div></div>
       <div class="card kpi"><div class="l">Worked without a plan</div><div class="v">${un.length}</div><div class="s">at stores that use planning</div></div>
     </div>
-    ${D.plan.rows.length ? '' : `<div class="note">No shifts planned for this month yet. Assign stores to managers in <b>Employees → Edit → Plans shifts for</b>, then they plan from the manager app.</div>`}
+    ${D.plan.rows.length ? '' : `<div class="note">No shifts planned for this month yet. Assign stores to managers in <b>Assign managers to stores</b> below, then they plan from the manager app.</div>`}
     <div class="row" style="gap:6px;margin:14px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
     <div class="scroll"><table><thead><tr><th>Date</th><th>Store</th><th>Employee</th><th>Planned</th><th>Reply</th><th>Actual IN–OUT</th><th>Result</th><th>Planned by</th></tr></thead><tbody>
     ${rows.filter(filt).map(r => { const [l, c] = ack[r.s.status] || [r.s.status, 't-mute'];
@@ -312,9 +313,38 @@ function shiftPlan() {
     ${un.length ? `<div class="card"><h2>Worked without a planned shift (${un.length})</h2><p class="muted">Punched IN on a day they had no planned shift, at a store that uses planning.</p>
       <div class="scroll"><table><thead><tr><th>Date</th><th>Employee</th><th>Store</th><th>IN</th></tr></thead><tbody>
       ${un.map(p => `<tr><td>${esc(String(p.time).slice(0, 10))}</td><td><b>${esc(p.name)}</b> <span class="muted">${p.empId}</span></td><td>${esc(branchName(p.store))}</td><td>${esc(String(p.time).slice(11, 16))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-    <div class="card"><h2>Who plans which stores</h2><div class="scroll"><table><thead><tr><th>Manager</th><th>Plans shifts for</th><th></th></tr></thead><tbody>
-      ${mgrs.map(e => `<tr><td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td><td>${String(e.mgrStores || '').split(',').filter(Boolean).map(c => esc(branchName(c))).join(', ') || '<span class="tag t-bad">none</span>'}</td><td><button class="btn" onclick="editEmp('${e.id}')">Edit</button></td></tr>`).join('')}
+    ${assignCard()}`;
+}
+/* Assign managers to stores (who can plan shifts where) */
+function assignCard() {
+  const D = ST.D;
+  const mgrs = D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active').sort((a, b) => a.name.localeCompare(b.name));
+  const sts = D.stores.filter(s => s.active === 'Yes');
+  const has = (e, c) => String(e.mgrStores || '').split(',').includes(c);
+  const count = c => mgrs.filter(e => has(e, c)).length;
+  return `<div class="card" id="assign"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Assign managers to stores</h2><div class="sp"></div>
+      <button class="btn y" onclick="saveAssign()">Save assignments</button></div>
+    <p class="muted">Tick the stores each manager plans shifts for. A manager sees only their ticked stores in the Shift planner. More than one manager can share a store.
+      To add a new manager, open <b>Employees → Edit</b> and set “Can punch at any store” to <b>Yes</b>.</p>
+    <div class="scroll"><table class="matrix"><thead><tr><th>Manager</th>${sts.map(s => `<th title="${esc(s.name)}" class="c">${esc(s.name)}</th>`).join('')}<th class="c">All</th></tr></thead><tbody>
+      ${mgrs.map(e => `<tr><td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td>${sts.map(s => `<td class="c"><input type="checkbox" class="mx" data-e="${e.id}" data-s="${s.code}" ${has(e, s.code) ? 'checked' : ''}></td>`).join('')}
+        <td class="c"><input type="checkbox" title="Tick / untick all stores" onchange="document.querySelectorAll('.mx[data-e=&quot;${e.id}&quot;]').forEach(x=>x.checked=this.checked)"></td></tr>`).join('') || `<tr><td colspan="${sts.length + 2}" class="muted">No managers yet</td></tr>`}
+      <tr class="sum"><td class="muted">Managers per store</td>${sts.map(s => `<td class="c">${count(s.code) ? count(s.code) : '<span class="tag t-bad">0</span>'}</td>`).join('')}<td></td></tr>
     </tbody></table></div></div>`;
+}
+async function saveAssign() {
+  const D = ST.D; const want = {};
+  document.querySelectorAll('.mx').forEach(x => { (want[x.dataset.e] = want[x.dataset.e] || []); if (x.checked) want[x.dataset.e].push(x.dataset.s); });
+  const changed = Object.keys(want).filter(id => want[id].slice().sort().join(',') !== String(D.emp[id].mgrStores || '').split(',').filter(Boolean).sort().join(','));
+  if (!changed.length) return toast('No changes');
+  try {
+    for (const id of changed) {
+      const e = D.emp[id];
+      await api({ action: 'saveEmployee', isNew: false, employee: { id, name: e.name, branch: e.branch, roaming: e.roaming, payType: e.payType, plan: e.plan, duty: e.duty,
+        woEligible: e.woEligible, woDays: e.woDays, dailyRate: e.dailyRate, status: e.status, mgrStores: want[id].join(',') } });
+    }
+    toast(changed.length + ' manager(s) updated'); await load();
+  } catch (err) { toast(err.message, true); await load(); }
 }
 
 /* ---------------- OVERVIEW ---------------- */
@@ -601,13 +631,16 @@ function stores() {
   const D = ST.D;
   $('#main').innerHTML = `<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Stores &amp; geofence</h2><div class="sp"></div><button class="btn y" onclick="editStore(null)">+ Add store</button></div>
     <p class="muted">Managers capture each store once from the <b>manager app</b> (<a href="manager.html" target="_blank">heavencrescita.github.io/attendance/manager.html</a>): GPS ±30 m or better + live selfie with random gestures + outside and inside photos. A captured store is locked; unlock it here to let a manager redo it.</p>
-    <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Location</th><th class="num">Radius</th><th>Captured by</th><th>Photos</th><th>Active</th><th></th></tr></thead><tbody>
+    <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Location</th><th class="num">Radius</th><th>Captured by</th><th>Photos</th><th>Shift planners</th><th>Active</th><th></th></tr></thead><tbody>
     ${D.stores.map(s => { const c = (D.captures || []).filter(x => x.store === s.code).pop();
       return `<tr><td>${s.code}</td><td><b>${esc(s.name)}</b></td><td>${s.lat === '' ? '<span class="tag t-bad">not set</span>' : `${s.lat}, ${s.lng}`}</td><td class="num">${s.radiusM} m</td>
       <td>${s.capturedBy ? `${esc(s.capturedBy)}<div class="muted">${String(s.capturedAt).slice(0, 16).replace('T', ' ')}${c ? ' · ±' + c.accuracyM + ' m' : ''}</div>${c ? `<span class="tag ${/^VERIFIED/.test(c.status) ? 't-ok' : 't-warn'}">${esc(c.status)}</span>` : ''}` : s.lat !== '' ? '<span class="tag t-warn">typed in by ' + esc(s.updatedBy) + '</span>' : '<span class="muted">—</span>'}</td>
-      <td>${c ? `<button class="btn" onclick="capturePhotos('${s.code}')">View</button>` : '<span class="muted">—</span>'}</td><td>${s.active}</td>
+      <td>${c ? `<button class="btn" onclick="capturePhotos('${s.code}')">View</button>` : '<span class="muted">—</span>'}</td>
+      <td>${planners(s.code) || '<span class="tag t-bad">none</span>'} <a class="btn" onclick="goAssign()">Assign</a></td><td>${s.active}</td>
       <td><button class="btn" onclick="editStore('${s.code}')">Edit</button> ${s.locked === 'Yes' ? `<button class="btn r" onclick="unlockStore('${s.code}')">Unlock</button>` : ''} ${s.lat !== '' ? `<a class="btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Map</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;
 }
+const planners = code => ST.D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active' && String(e.mgrStores || '').split(',').includes(code)).map(e => esc(e.name.split(' ')[0])).join(', ');
+function goAssign() { go('shifts'); setTimeout(() => { const a = document.getElementById('assign'); if (a) a.scrollIntoView({ behavior: 'smooth' }); }, 50); }
 function unlockStore(code) { if (confirmInline('Unlock this store so a manager can capture it again?')) act({ action: 'unlockStore', code }, 'Unlocked'); }
 async function capturePhotos(code) {
   const D = ST.D, s = D.stores.find(x => x.code === code), c = (D.captures || []).filter(x => x.store === code).pop();
