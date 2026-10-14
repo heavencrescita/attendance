@@ -869,12 +869,16 @@ function reqs() {
     return `<b>Update details</b><table style="margin-top:6px"><tbody>${Object.keys(d).map(k => `<tr><td class="muted">${REQ_F[k] || k}</td><td>${esc(e[k] || '—')}</td><td>→</td><td><b>${esc(d[k])}</b></td></tr>`).join('')}</tbody></table>`; };
   $('#main').innerHTML = `<div class="card"><h2>Waiting for you · ${pend.length}</h2>
     <p class="muted" style="margin-top:-6px">Staff send these from My BWC (heavencrescita.github.io/attendance/me.html). Approving a punch correction adds a manual IN and OUT; approving details updates the employee record.</p>
-    ${pend.map(r => `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span></div></div>
+    ${pend.map(r => `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span>${r.test ? ' <span class="tag t-mute">test account</span>' : ''}</div></div>
       <div style="margin:8px 0">${body(r)}</div>
       <div class="row"><input type="text" id="rn-${r.requestId}" placeholder="Note to the employee (optional)" style="flex:1"><button class="btn g" onclick="decide('${r.requestId}','APPROVE')">Approve</button><button class="btn r" onclick="decide('${r.requestId}','REJECT')">Reject</button></div></div>`).join('') || '<p class="muted">Nothing to review.</p>'}</div>
   ${done.length ? `<div class="card" style="margin-top:14px"><h2>Recently decided</h2><div class="scroll"><table><thead><tr><th>When</th><th>Employee</th><th>Request</th><th>Decision</th><th>By</th></tr></thead><tbody>
-    ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+  ${D.role === 'admin' ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
+    <p class="muted" style="margin-top:-6px">WAFF-901 “Test Employee” works in My BWC and on the punch screen like a real employee, but WAFF-900 to WAFF-999 never count in payroll, the dashboard, exports or the shift planner. Resetting wipes its punches, shifts and requests and loads fresh sample data for this month.</p>
+    <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>` : ''}`;
 }
+async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
 async function decide(id, decision) { await act({ action: 'reviewRequest', requestId: id, decision, note: ($('#rn-' + id) || {}).value || '' }, decision === 'APPROVE' ? 'Approved' : 'Rejected'); }
 
 function users() {
