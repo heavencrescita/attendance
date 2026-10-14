@@ -59,6 +59,7 @@ button:disabled{opacity:.45}
 .acc{background:var(--ok);color:#fff}.acc small{color:#e6f4ea;opacity:1}.rej{background:#fff;color:var(--bad);border:2px solid var(--bad)}
 textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line);border-radius:12px;margin-top:8px;font-family:inherit}
 .chg{font-size:13px;color:#0a6e6f;font-weight:700;cursor:pointer;margin-top:6px;display:block}
+.mylink{display:block;text-align:center;background:#2a1a14;color:#f6efe6;border-radius:14px;padding:14px;font-weight:700;text-decoration:none;margin-bottom:14px}.mylink small{display:block;font-weight:400;color:#cdbfb4;font-size:12.5px}
 .shnote{margin-top:8px;padding:9px 12px;border-radius:10px;background:var(--warnbg);color:var(--warn);font-size:14px;font-weight:700;cursor:pointer}
 </style>
 </head>
@@ -74,6 +75,7 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line
   <button class="y" id="b-login" onclick="login()">Continue<small>தொடரவும்</small></button>
   <div class="err" id="e-login"></div>
 </section>
+<a class="mylink" id="mylink" href="me.html">See my attendance, overtime and pay<small>என் வருகை மற்றும் சம்பளம்</small></a>
 
 <section id="s-punch" class="hide">
   <div class="card">
@@ -99,6 +101,7 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line
     <div class="muted" id="r-detail" style="margin-top:8px;font-size:14px"></div>
   </div>
   <button class="y" onclick="logout()">Done<small>முடிந்தது</small></button>
+  <a class="mylink" href="me.html">See my attendance, overtime and pay<small>என் வருகை மற்றும் சம்பளம்</small></a>
   <p class="foot" id="r-auto"></p>
 </section>
 
@@ -234,7 +237,7 @@ const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5
 const $ = id => document.getElementById(id);
 let S = {}; let cam = null; let watch = null; let autoTimer = null;
 
-function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
+function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classList.toggle('hide', s !== id)); $('mylink').classList.toggle('hide', id !== 's-login'); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 function fmtTime(iso) { return iso ? iso.slice(11, 16) : ''; }
 function fmtDay(iso) { const d = new Date(iso); return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }

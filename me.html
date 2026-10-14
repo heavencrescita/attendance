@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a1a14">
+<title>My BWC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..700,50..100&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Tamil:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cocoa:#2a1a14;--cocoa2:#3d271e;--bg:#eceef1;--surface:#fff;--ink:#231713;--muted:#6f6661;--line:#dedcd8;
+  --syrup:#e2a73b;--syrup-d:#a8721f;--gold-t:#94621a;--brand:#f5e419;--well:#e4e2de;
+  --ok:#1f7a46;--ok-bg:#e3f2e8;--warn:#8a5600;--warn-bg:#fbefd6;--bad:#a83232;--bad-bg:#f8e4e2;
+  --serif:"Fraunces",Georgia,serif;--sans:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;--ta:"Noto Sans Tamil",var(--sans);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141010;--surface:#1f1916;--ink:#f3ece6;--muted:#ad9f97;--line:#352b26;--well:#2c2421;--gold-t:#e9b45a;
+  --ok:#62c98b;--ok-bg:#16301f;--warn:#efb54a;--warn-bg:#33270f;--bad:#ff8b85;--bad-bg:#3a1a1c}}
+:root[data-theme="dark"]{--bg:#141010;--surface:#1f1916;--ink:#f3ece6;--muted:#ad9f97;--line:#352b26;--well:#2c2421;--gold-t:#e9b45a;--ok:#62c98b;--ok-bg:#16301f;--warn:#efb54a;--warn-bg:#33270f;--bad:#ff8b85;--bad-bg:#3a1a1c}
+*{box-sizing:border-box}
+.lgimg{background:url(data:image/png;base64,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) center/contain no-repeat;display:block;flex:none}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--syrup);outline-offset:2px}
+.ta{font-family:var(--ta);font-size:.86em;color:var(--muted);font-weight:400}
+.hide{display:none!important}
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ---------- sign in ---------- */
+#login{min-height:100vh;min-height:100dvh;background:radial-gradient(120% 80% at 50% 0%,#4a2f23 0%,var(--cocoa) 55%,#1d120e 100%);color:#f6efe6;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+#login .logo{width:116px;height:116px;filter:drop-shadow(0 12px 30px rgba(0,0,0,.45))}
+#login h1{font-family:var(--serif);font-variation-settings:"SOFT" 100;font-weight:500;font-size:34px;line-height:1.1;margin:22px 0 4px;text-align:center}
+#login p.sub{margin:0 0 26px;color:#cdbfb4;text-align:center;max-width:300px}
+.lform{width:100%;max-width:360px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:22px;backdrop-filter:blur(6px)}
+.lform label{display:block;font-size:13px;color:#e8dccf;margin:0 0 6px;font-weight:600}
+.lform label .ta{color:#b9a99c}
+.field{display:flex;align-items:center;background:#fffaf3;border-radius:14px;margin-bottom:16px;border:2px solid transparent}
+.field:focus-within{border-color:var(--syrup)}
+.field b{color:#8b7b70;padding-left:14px;font-size:19px;font-weight:700}
+.field input{flex:1;min-width:0;border:0;background:none;padding:13px 14px 13px 4px;font-size:21px;font-weight:700;letter-spacing:.08em;color:#231713;outline:none}
+.btn{border:0;border-radius:14px;padding:14px 18px;font-weight:800;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn-syrup{background:linear-gradient(180deg,#f0bb55,#d9982c);color:#2a1a14;box-shadow:0 8px 20px rgba(217,152,44,.35),inset 0 1px 0 rgba(255,255,255,.45)}
+.btn-ghost{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.btn-quiet{background:none;color:var(--gold-t);padding:8px 4px;font-weight:700}
+.btn:disabled{opacity:.5;cursor:default}
+.wide{width:100%}
+.lerr{background:#5a2420;color:#ffd9d4;border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
+.lfoot{margin-top:22px;font-size:13px;color:#b9a99c;text-align:center}
+.lfoot a{color:#f0c46e}
+
+/* ---------- app shell ---------- */
+.hero{background:linear-gradient(160deg,#3b251c 0%,var(--cocoa) 60%,#1f130f 100%);color:#f6efe6;padding:calc(env(safe-area-inset-top) + 16px) 18px 26px;position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-60px;top:-40px;width:220px;height:220px;opacity:.07;
+  background-image:linear-gradient(#fff 2px,transparent 2px),linear-gradient(90deg,#fff 2px,transparent 2px);background-size:22px 22px;transform:rotate(12deg);border-radius:30px}
+.wrap{max-width:560px;margin:0 auto;position:relative;z-index:1}
+.idrow{display:flex;align-items:center;gap:12px}
+.idrow .lgimg{width:46px;height:46px}
+.idrow .who{flex:1;min-width:0}
+.idrow .who b{display:block;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.idrow .who span{font-size:13px;color:#cdbfb4}
+.mswitch{display:flex;align-items:center;gap:6px;margin-top:20px}
+.mswitch button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#f6efe6;border-radius:999px;width:36px;height:36px;cursor:pointer;font-size:18px;line-height:1}
+.mswitch button:disabled{opacity:.3}
+.mswitch .m{flex:1;text-align:center;font-weight:700;letter-spacing:.01em}
+.takehome{margin-top:16px}
+.takehome .lbl{font-size:13.5px;color:#d8c9bd}
+.takehome .amt{font-family:var(--serif);font-variation-settings:"SOFT" 100,"opsz" 144;font-weight:500;font-size:52px;line-height:1.05;letter-spacing:-.01em;margin:4px 0 6px}
+.takehome .amt small{font-size:26px;vertical-align:.45em;margin-right:4px;color:#f0c46e}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:999px}
+.badge.final{background:rgba(98,201,139,.16);color:#9fe2b8}
+.badge.est{background:rgba(240,196,110,.16);color:#f3cf86}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:18px;border-top:1px solid rgba(255,255,255,.12)}
+.stats div{padding:12px 0 0}
+.stats div+div{padding-left:14px;border-left:1px solid rgba(255,255,255,.12)}
+.stats b{display:block;font-size:20px;font-family:var(--serif);font-weight:500}
+.stats span{font-size:12.5px;color:#cdbfb4}
+
+main{max-width:560px;margin:0 auto;padding:18px 16px calc(96px + env(safe-area-inset-bottom))}
+.panel{background:var(--surface);border-radius:20px;padding:18px;border:1px solid var(--line);margin-bottom:14px}
+.panel h2{font-family:var(--serif);font-variation-settings:"SOFT" 100;font-weight:600;font-size:21px;margin:0 0 4px;letter-spacing:-.005em}
+.panel .lead{margin:0 0 14px;color:var(--muted);font-size:14px}
+.row{display:flex;align-items:center;gap:10px}
+.sp{flex:1}
+
+/* ---------- the waffle calendar ---------- */
+.waffle{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;padding:12px;border-radius:22px;
+  background:linear-gradient(180deg,#d9a24a,#c38a32);box-shadow:inset 0 2px 0 rgba(255,255,255,.35),inset 0 -3px 0 rgba(0,0,0,.12),0 10px 24px rgba(160,105,30,.25)}
+.waffle .dh{font-size:11px;font-weight:800;text-align:center;color:#5b3a12;opacity:.8;padding-bottom:2px}
+.cell{aspect-ratio:1;border-radius:9px;position:relative;border:0;padding:0;cursor:pointer;
+  background:#b77d2b;box-shadow:inset 0 3px 5px rgba(80,45,5,.55),inset 0 -1px 0 rgba(255,255,255,.25);color:#fff7e8;font-weight:800;font-size:12.5px}
+.cell span{position:absolute;left:6px;top:4px;opacity:.9}
+.cell.out{visibility:hidden}
+.cell.future{opacity:.45;cursor:default}
+.cell.full{background:radial-gradient(120% 90% at 30% 25%,#fff3c4 0%,#f6c24e 35%,#d88f17 100%);box-shadow:inset 0 -2px 3px rgba(120,60,0,.35),inset 0 2px 2px rgba(255,255,255,.7);color:#5a3200}
+.cell.half{background:linear-gradient(180deg,#b77d2b 0 48%,#f2bb47 48%);box-shadow:inset 0 3px 5px rgba(80,45,5,.45);color:#fff}
+.cell.off{background:repeating-linear-gradient(135deg,#c4893a 0 5px,#d9a55a 5px 7px);box-shadow:inset 0 2px 4px rgba(80,45,5,.4)}
+.cell.today{outline:3px solid #fff;outline-offset:-3px}
+.cell.sel{transform:scale(1.06);z-index:2;box-shadow:0 0 0 3px var(--cocoa),inset 0 -2px 3px rgba(120,60,0,.35)}
+.cell i{position:absolute;right:5px;bottom:4px;width:6px;height:6px;border-radius:50%;background:#2a1a14}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.legend em{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px}
+.lg-full{background:radial-gradient(#fff3c4,#f6c24e 40%,#d88f17)}.lg-half{background:linear-gradient(180deg,#b77d2b 50%,#f2bb47 50%)}
+.lg-none{background:#b77d2b;box-shadow:inset 0 2px 3px rgba(80,45,5,.5)}.lg-plan{position:relative;background:#b77d2b}.lg-plan::after{content:"";position:absolute;right:2px;bottom:2px;width:5px;height:5px;border-radius:50%;background:#2a1a14}
+
+.day{margin-top:14px;border-radius:16px;background:var(--bg);padding:14px}
+.day h3{margin:0 0 6px;font-size:16px}
+.shift{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.shift:first-of-type{border-top:0}
+.shift .t{font-weight:800;font-size:17px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.t-ok{background:var(--ok-bg);color:var(--ok)}.t-warn{background:var(--warn-bg);color:var(--warn)}.t-bad{background:var(--bad-bg);color:var(--bad)}.t-mute{background:var(--well);color:var(--muted)}
+
+/* ---------- payslip ---------- */
+.slip{border-radius:20px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.slip-head{background:var(--cocoa);color:#f6efe6;padding:16px 18px;display:flex;align-items:center;gap:12px}
+.slip-head .lgimg{width:40px;height:40px}
+.slip-head b{display:block;font-family:var(--serif);font-weight:500;font-size:19px}
+.slip-head span{font-size:12.5px;color:#cdbfb4}
+.slip-body{padding:6px 18px 16px}
+.ln{display:flex;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);align-items:baseline}
+.ln .k{flex:1}.ln .k small{display:block;color:var(--muted);font-size:12.5px}
+.ln .v{font-weight:700;font-variant-numeric:tabular-nums}
+.ln.minus .v{color:var(--bad)}
+.sec{font-weight:800;font-size:13px;color:var(--gold-t);margin:14px 0 0}
+.net{display:flex;align-items:baseline;margin-top:14px;padding-top:12px;border-top:2px solid var(--ink)}
+.net b{flex:1;font-size:16px}
+.net span{font-family:var(--serif);font-size:30px;font-weight:600}
+.how{font-size:13px;color:var(--muted);margin-top:10px}
+.bars{display:flex;align-items:flex-end;gap:10px;height:150px;margin-top:8px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;border:0;background:none;padding:0}
+.bar i{display:block;width:100%;max-width:54px;border-radius:10px 10px 4px 4px;background:var(--well)}
+.bar.on i{background:linear-gradient(180deg,#f0bb55,#c98a26)}
+.bar b{font-size:12.5px;margin-bottom:4px;font-variant-numeric:tabular-nums}
+.bar span{font-size:12px;color:var(--muted);margin-top:6px}
+
+/* ---------- shifts ---------- */
+.sitem{border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:10px}
+.sitem .row b{flex:1;font-size:16px}
+.ans{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.acc{background:var(--ok);color:#fff}.rej{background:var(--surface);color:var(--bad);border:2px solid var(--bad)}
+textarea,.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:11px 12px;background:var(--surface);font-size:16px}
+textarea:focus,.in:focus{outline:none;border-color:var(--syrup)}
+
+/* ---------- me ---------- */
+dl.kv{margin:0;display:grid;grid-template-columns:auto 1fr;gap:10px 16px}
+dl.kv dt{color:var(--muted);font-size:13.5px}
+dl.kv dd{margin:0;font-weight:700;text-align:right;word-break:break-word}
+.fgrid label{display:block;font-size:13.5px;font-weight:700;margin:12px 0 5px}
+.note{border-radius:14px;padding:11px 13px;font-size:14px;margin-top:12px}
+.note.ok{background:var(--ok-bg);color:var(--ok)}.note.bad{background:var(--bad-bg);color:var(--bad)}.note.warn{background:var(--warn-bg);color:var(--warn)}
+.req{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.req:first-child{border-top:0}
+.req .tag{align-self:flex-start;flex:none}
+
+/* ---------- tab bar ---------- */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(10px);border-top:1px solid var(--line);
+  padding:6px 8px calc(6px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:20}
+nav.tabs .in{display:flex;width:100%;max-width:560px}
+nav.tabs button{flex:1;background:none;border:0;padding:6px 2px;cursor:pointer;color:var(--muted);font-size:11.5px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:12px}
+nav.tabs button svg{width:22px;height:22px}
+nav.tabs button.on{color:var(--ink)}
+nav.tabs button.on svg{color:var(--syrup-d)}
+nav.tabs .dotn{position:absolute;margin-left:18px;margin-top:-2px;min-width:16px;height:16px;border-radius:8px;background:var(--bad);color:#fff;font-size:10px;line-height:16px;padding:0 4px}
+.sheet{position:fixed;inset:0;background:rgba(20,10,6,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet .box{background:var(--surface);width:100%;max-width:560px;border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+.sheet h3{font-family:var(--serif);font-weight:600;font-size:21px;margin:0 0 4px}
+.skeleton{height:120px;border-radius:20px;background:linear-gradient(90deg,var(--well),var(--surface),var(--well));background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.skeleton{animation:none}.cell.sel{transform:none}}
+@media print{nav.tabs,.hero,.noprint{display:none!important}main{padding:0}body{background:#fff}.panel{border:0}}
+</style>
+</head>
+<body>
+<section id="login">
+  <div class="logo lgimg" role="img" aria-label="The Belgian Waffle Cafe"></div>
+  <h1>My BWC</h1>
+  <p class="sub">Your shifts, hours and pay in one place<br><span class="ta">உங்கள் வருகை மற்றும் சம்பளம்</span></p>
+  <div class="lform">
+    <label for="wid">WAFF number <span class="ta">· WAFF எண்</span></label>
+    <div class="field"><b>WAFF-</b><input id="wid" inputmode="numeric" maxlength="4" autocomplete="username" placeholder="047"></div>
+    <label for="pin">PIN <span class="ta">· 4 இலக்க PIN</span></label>
+    <div class="field"><input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="••••" style="padding-left:14px"></div>
+    <button class="btn btn-syrup wide" id="b-login" onclick="signIn()">Sign in</button>
+    <div class="lerr hide" id="e-login"></div>
+  </div>
+  <div class="lfoot">To punch in or out, use the <a href="index.html">attendance screen</a>.<br>Forgot your PIN? Ask your manager to reset it.</div>
+</section>
+
+<div id="app" class="hide">
+  <header class="hero"><div class="wrap">
+    <div class="idrow"><i class="lgimg" aria-hidden="true"></i><div class="who"><b id="h-name"></b><span id="h-sub"></span></div>
+      <a class="btn btn-syrup" href="index.html" style="padding:9px 14px;font-size:14px;text-decoration:none">Punch</a></div>
+    <div class="mswitch"><button id="m-prev" aria-label="Previous month" onclick="stepMonth(-1)">‹</button><div class="m" id="m-lbl"></div><button id="m-next" aria-label="Next month" onclick="stepMonth(1)">›</button></div>
+    <div class="takehome"><div class="lbl" id="th-lbl">Take-home pay</div><div class="amt num" id="th-amt"></div><span class="badge" id="th-badge"></span></div>
+    <div class="stats"><div><b class="num" id="st-days"></b><span>days worked</span></div><div><b class="num" id="st-hrs"></b><span>hours</span></div><div><b class="num" id="st-ot"></b><span>overtime pay</span></div></div>
+  </div></header>
+  <main id="main"></main>
+  <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
+</div>
+<div id="sheet" class="sheet hide" onclick="if(event.target===this)closeSheet()"><div class="box" id="sheetbox"></div></div>
+
+<script>
+// BWC payroll engine — mirrors the formulas in BWC_Payroll_Sep2026_FINAL_v3.xlsx (SEP-26 PAYROLL sheet).
+//  Days worked : shift > halfDayHrs (4 h) = 1 day, 0 < shift ≤ 4 h = ½ day
+//  Week-off    : W/O eligible → credit days = min(WkOff, days ≥ workDays ? WkOff : INT((days+1)/7)); hours = days × duty
+//  Rate / hr   : eligible → plan ÷ (calDays × duty); not eligible → dailyRate ÷ duty
+//  FIXED       : base = plan ÷ workDays × min(days, workDays); no OT
+//  HOURLY      : hours = clocked + credit; OT hrs = max(0, clocked − workDays × duty); base = rate × (hours − OT); OT pay = OT × rate × otMultiplier
+//  NET         : Inactive → 0, else ROUND((base + OT + additions − deductions) ÷ 10) × 10 (Excel rounding); negative NET carries forward
+const COUNTED = ['ACCEPTED', 'APPROVED', 'MANUAL'];
+const MAX_SHIFT_MS = 24 * 3600000;   // must match OPEN_SHIFT_MAX_H in Code.gs
+const LONG_SHIFT_H = 20;
+
+function istParts(iso) { return { date: iso.slice(0, 10), time: iso.slice(11, 16) }; }
+
+// Pair punches into shifts for one employee. Returns {shifts, issues}.
+function buildShifts(punches, now) {
+  now = now || Date.now();
+  const ps = punches.filter(p => COUNTED.includes(p.status)).sort((a, b) => Number(a.epoch) - Number(b.epoch));
+  const shifts = [], issues = []; let open = null;
+  for (const p of ps) {
+    if (p.type === 'IN') {
+      if (open) issues.push({ kind: 'Missing OUT', punch: open });
+      open = p;
+    } else {
+      if (open && Number(p.epoch) - Number(open.epoch) <= MAX_SHIFT_MS) {
+        const i = istParts(open.time), o = istParts(p.time);
+        shifts.push({ date: i.date, day: Number(i.date.slice(8, 10)), in: i.time, out: o.time + (o.date !== i.date ? ' +1' : ''),
+          hours: (Number(p.epoch) - Number(open.epoch)) / 3600000, store: open.store, inPunch: open, outPunch: p });
+        if ((Number(p.epoch) - Number(open.epoch)) / 3600000 > LONG_SHIFT_H) issues.push({ kind: 'Very long shift — check', punch: open, counted: true });
+        open = null;
+      } else issues.push({ kind: 'OUT without IN', punch: p });
+    }
+  }
+  if (open) issues.push({ kind: now - Number(open.epoch) > MAX_SHIFT_MS ? 'Missing OUT' : 'On shift now', punch: open });
+  return { shifts, issues };
+}
+
+// Imported (Excel) shifts → same shape as punched shifts
+function importedShifts(rows) {
+  return rows.map(r => ({ date: r.date, day: Number(String(r.date).slice(8, 10)), in: r.inT, out: r.outT, hours: Number(r.hours), store: r.branch, imported: true }));
+}
+
+function daysInMonth(month) { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
+
+// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
+function calcPay(e, shifts, ctx) {
+  const cfg = ctx.cfg, calDays = daysInMonth(ctx.month), workDays = calDays - Number(cfg.weekOffsPerMonth || 4);
+  const halfH = Number(cfg.halfDayHrs || 4), otMult = Number(cfg.otMultiplier || 1);
+  const duty = Number(e.duty) || 9, plan = Number(e.plan) || 0;
+  const worked = shifts.filter(x => x.hours > 0);
+  const clockH = worked.reduce((s, x) => s + x.hours, 0);
+  const halfDays = worked.filter(x => x.hours <= halfH).length;
+  const days = worked.length - 0.5 * halfDays;
+  const eligible = e.woEligible !== 'No';
+  const woMax = e.woDays === '' || e.woDays == null ? Number(cfg.weekOffsPerMonth || 4) : Number(e.woDays);
+  const rate = eligible ? plan / (calDays * duty) : (Number(e.dailyRate) || plan / calDays) / duty;
+  const wo = (ctx.weekOff || []).find(w => w.empId === e.id);
+  const ruleCredit = eligible ? Math.min(woMax, days >= workDays ? woMax : Math.floor((days + 1) / 7)) : 0;
+  const creditDays = wo ? Number(wo.days) : ruleCredit;
+  const creditSource = wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
+  const creditH = creditDays * duty;
+  const active = e.status === 'Active';
+  let base = 0, otH = 0, otPay = 0, basis;
+  if (e.payType === 'FIXED') {
+    base = active ? plan / workDays * Math.min(days, workDays) : 0;
+    basis = `₹${inr(plan)} ÷ ${workDays} × min(${days}, ${workDays})`;
+  } else {
+    const hrs = clockH + creditH, expH = workDays * duty;
+    otH = Math.max(0, clockH - expH);
+    base = active ? rate * (hrs - otH) : 0;
+    otPay = active ? otH * rate * otMult : 0;
+    basis = `(${clockH.toFixed(2)} h + ${creditH} h week-off − ${otH.toFixed(2)} h OT) × ₹${rate.toFixed(2)}/h`;
+  }
+  const ded = (ctx.ded || []).filter(x => x.empId === e.id), add = (ctx.add || []).filter(x => x.empId === e.id);
+  const dedT = ded.reduce((s, x) => s + Number(x.amount), 0), addT = add.reduce((s, x) => s + Number(x.amount), 0);
+  const gross = base + otPay + addT - dedT;
+  const net = active ? excelRound(gross / 10) * 10 : 0;
+  return { workH: clockH, days, halfDays, calDays, workDays, rate, creditDays, creditSource, creditH, eligible, base, otH, otPay, basis,
+    ded, add, dedT, addT, gross, net, payable: Math.max(0, net), carry: Math.max(0, -net) };
+}
+function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
+
+
+const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const rs = n => (n < 0 ? '−₹' : '₹') + Math.abs(Math.round(n)).toLocaleString('en-IN');
+const MN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const monLbl = m => MN[Number(m.slice(5)) - 1] + ' ' + m.slice(0, 4);
+const todayIST = () => new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+const dayLbl = ymd => { const d = new Date(ymd + 'T12:00:00'); return DN[d.getDay()] + ', ' + d.getDate() + ' ' + MN[d.getMonth()].slice(0, 3); };
+let U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [] };
+
+async function api(body) {
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });
+  const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j;
+}
+function lerr(m) { $('e-login').textContent = m || ''; $('e-login').classList.toggle('hide', !m); }
+
+async function signIn() {
+  lerr(); const id = $('wid').value.replace(/\D/g, ''), pin = $('pin').value.replace(/\D/g, '');
+  if (!id) return lerr('Enter your WAFF number, for example 47 for WAFF-047.');
+  if (pin.length !== 4) return lerr('Your PIN has 4 digits.');
+  $('b-login').disabled = true; $('b-login').textContent = 'Signing in…';
+  try { U.id = id; U.pin = pin; await load(); $('login').classList.add('hide'); $('app').classList.remove('hide'); loadShifts(); }
+  catch (e) { lerr(e.message); U.pin = ''; }
+  finally { $('b-login').disabled = false; $('b-login').textContent = 'Sign in'; }
+}
+function signOut() { U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [] }; $('pin').value = ''; $('app').classList.add('hide'); $('login').classList.remove('hide'); closeSheet(); window.scrollTo(0, 0); }
+
+async function load(month) {
+  if (U.D) $('main').innerHTML = '<div class="skeleton"></div>';
+  const D = await api({ action: 'portal', id: U.id, pin: U.pin, month });
+  U.D = D; derive(); render();
+}
+function derive() {
+  const D = U.D, e = D.profile;
+  const shifts = buildShifts(D.punches).shifts.filter(s => s.date.slice(0, 7) === D.month).concat(importedShifts(D.importedShifts || []))
+    .sort((a, b) => (a.date + a.in).localeCompare(b.date + b.in));
+  // A month taken from the payroll workbook is paid on the terms of that month
+  const v0 = D.v9, emp = Object.assign({}, e);
+  if (v0 && v0.plan !== '' && v0.plan != null) Object.assign(emp, { payType: v0.payType || e.payType, plan: Number(v0.plan), duty: Number(v0.duty) || e.duty, woEligible: v0.woEligible || e.woEligible, woDays: v0.woDays === '' ? e.woDays : v0.woDays, dailyRate: Number(v0.dailyRate) || 0, status: v0.status || e.status });
+  D.emp = emp;
+  D.shifts = shifts;
+  D.calc = calcPay(emp, shifts, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff });
+  const v = D.v9;
+  D.final = !!v;
+  D.pay = v ? { net: +v.net, base: +v.base, ot: +v.ot, ded: +v.ded, add: +v.add, days: +v.days } : { net: D.calc.net, base: D.calc.base, ot: D.calc.otPay, ded: D.calc.dedT, add: D.calc.addT, days: D.calc.days };
+  D.hours = shifts.reduce((s, x) => s + (x.hours > 0 ? x.hours : 0), 0);
+}
+function stepMonth(d) { const ms = U.D.months, i = ms.indexOf(U.D.month) + d; if (ms[i]) { U.sel = null; load(ms[i]).catch(e => alert(e.message)); } }
+
+function render() {
+  const D = U.D, e = D.profile, P = D.pay;
+  $('h-name').textContent = e.name; $('h-sub').textContent = e.id + ' · ' + e.branchName;
+  $('m-lbl').textContent = monLbl(D.month);
+  const i = D.months.indexOf(D.month); $('m-prev').disabled = i <= 0; $('m-next').disabled = i >= D.months.length - 1;
+  $('th-amt').innerHTML = '<small>₹</small>' + Math.max(0, Math.round(P.net)).toLocaleString('en-IN');
+  const live = D.month === todayIST().slice(0, 7);
+  $('th-lbl').textContent = D.final ? 'Take-home pay' : live ? 'Earned so far this month' : 'Estimated take-home pay';
+  $('th-badge').className = 'badge ' + (D.final ? 'final' : 'est');
+  $('th-badge').textContent = D.final ? '● Final, as paid' : '● Estimate, may change';
+  $('st-days').textContent = (+P.days).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+  $('st-hrs').textContent = Math.round(D.hours).toLocaleString('en-IN');
+  $('st-ot').textContent = rs(P.ot);
+  const pend = U.shifts.filter(s => s.status === 'PENDING' && s.canAnswer).length;
+  const tabs = [['home', 'Overview', 'M3 10.5 12 3l9 7.5V21H3z'], ['att', 'Attendance', 'M4 4h16v16H4zM4 9h16M9 4v16M14 4v16'], ['pay', 'Pay', 'M3 6h18v12H3zM3 10h18M7 15h4'],
+    ['shifts', 'Shifts', 'M12 7v5l3 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z', pend], ['me', 'My details', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6']];
+  $('tabs').innerHTML = tabs.map(([k, l, d, n]) => `<button class="${U.tab === k ? 'on' : ''}" onclick="go('${k}')" aria-current="${U.tab === k ? 'page' : 'false'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="${d}"/></svg>${l}${n ? `<span class="dotn">${n}</span>` : ''}</button>`).join('');
+  ({ home, att, pay, shifts: shiftsTab, me })[U.tab]();
+}
+function go(t) { U.tab = t; render(); window.scrollTo({ top: t === 'home' ? 0 : $('main').offsetTop - 10, behavior: 'smooth' }); }
+
+/* ---------- waffle calendar ---------- */
+function dayInfo(ymd) {
+  const D = U.D, sh = D.shifts.filter(s => s.date === ymd && s.hours > 0), h = sh.reduce((s, x) => s + x.hours, 0);
+  const plan = (D.planned || []).filter(p => p.date === ymd);
+  return { sh, h, plan, cls: !sh.length ? '' : h <= Number(D.config.halfDayHrs || 4) ? 'half' : 'full' };
+}
+function waffle() {
+  const D = U.D, [y, m] = D.month.split('-').map(Number), first = new Date(y, m - 1, 1).getDay(), dim = daysInMonth(D.month), today = todayIST();
+  let cells = DN.map(d => `<div class="dh">${d[0]}</div>`).join('');
+  for (let i = 0; i < first; i++) cells += '<div class="cell out" aria-hidden="true"></div>';
+  for (let d = 1; d <= dim; d++) {
+    const ymd = D.month + '-' + String(d).padStart(2, '0'), inf = dayInfo(ymd), fut = ymd > today;
+    const lab = `${dayLbl(ymd)}: ${inf.sh.length ? inf.h.toFixed(1) + ' hours worked' : fut ? 'upcoming' : 'not worked'}${inf.plan.length ? ', shift planned' : ''}`;
+    cells += `<button class="cell ${inf.cls} ${fut && !inf.sh.length ? 'future' : ''} ${ymd === today ? 'today' : ''} ${U.sel === ymd ? 'sel' : ''}" aria-label="${lab}" onclick="pickDay('${ymd}')"><span>${d}</span>${inf.plan.length ? '<i></i>' : ''}</button>`;
+  }
+  return `<div class="waffle" role="group" aria-label="Days in ${monLbl(D.month)}">${cells}</div>
+    <div class="legend"><span><em class="lg-full"></em>Full day</span><span><em class="lg-half"></em>Half day (4 h or less)</span><span><em class="lg-none"></em>Not worked</span><span><em class="lg-plan"></em>Shift planned</span></div>`;
+}
+function pickDay(ymd) { U.sel = U.sel === ymd ? null : ymd; render(); const el = $('daybox'); if (el && U.sel) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+function dayBox() {
+  if (!U.sel) return '';
+  const inf = dayInfo(U.sel), D = U.D;
+  return `<div class="day" id="daybox"><h3>${dayLbl(U.sel)}</h3>
+    ${inf.sh.map(s => `<div class="shift"><div class="t num">${s.in} – ${s.out}</div><div class="sp"></div><div class="muted">${(+s.hours).toFixed(1)} h · ${esc(D.stores[s.store] || s.store || '')}</div></div>`).join('') || '<div class="muted">No punches on this day.</div>'}
+    ${inf.plan.map(p => `<div class="muted" style="margin-top:6px">Planned: ${p.start}–${p.end} at ${esc(p.store)}</div>`).join('')}
+    ${U.sel <= todayIST() ? `<button class="btn btn-quiet" onclick="fixSheet('${U.sel}')">Report a wrong or missing punch</button>` : ''}</div>`;
+}
+
+/* ---------- tabs ---------- */
+function home() {
+  const D = U.D, up = U.shifts.filter(s => s.canAnswer).slice(0, 1)[0], pendReq = (D.requests || []).filter(r => r.status === 'PENDING').length;
+  const pend = U.shifts.filter(s => s.status === 'PENDING' && s.canAnswer).length;
+  $('main').innerHTML = `
+  ${pend ? `<div class="panel" style="border-color:var(--syrup)"><div class="row"><div><b>${pend} planned shift${pend > 1 ? 's need' : ' needs'} your answer</b><div class="ta">ஷிஃப்டுகளுக்கு பதில் தேவை</div></div><div class="sp"></div><button class="btn btn-syrup" onclick="go('shifts')">Answer</button></div></div>` : ''}
+  <div class="panel"><h2>${monLbl(D.month)} at a glance</h2><p class="lead">Tap a day to see your punches.</p>${waffle()}${dayBox()}</div>
+  <div class="panel"><div class="row"><div><h2 style="margin:0">Your pay this month</h2><div class="muted" style="font-size:14px">${D.final ? 'Final figures from the payroll' : 'Worked out from your punches so far'}</div></div></div>
+    <div class="ln"><div class="k">Earned for hours and days</div><div class="v">${rs(D.pay.base)}</div></div>
+    ${D.pay.ot ? `<div class="ln"><div class="k">Overtime</div><div class="v">${rs(D.pay.ot)}</div></div>` : ''}
+    ${D.pay.add ? `<div class="ln"><div class="k">Bonus and other additions</div><div class="v">${rs(D.pay.add)}</div></div>` : ''}
+    <div class="ln minus"><div class="k">Deductions</div><div class="v">${D.pay.ded ? '−' + rs(D.pay.ded) : '₹0'}</div></div>
+    <button class="btn btn-ghost wide" style="margin-top:14px" onclick="go('pay')">See full payslip</button></div>
+  ${up ? `<div class="panel"><h2>Next planned shift</h2><div class="row" style="margin-top:6px"><div><b style="font-size:17px">${dayLbl(up.date)}, ${up.start}–${up.end}</b><div class="muted">${esc(up.store)}</div></div><div class="sp"></div>${stTag(up.status)}</div></div>` : ''}
+  ${pendReq ? `<div class="panel"><b>${pendReq} request${pendReq > 1 ? 's are' : ' is'} waiting for your manager.</b> <button class="btn btn-quiet" onclick="go('me')">View</button></div>` : ''}`;
+}
+function att() {
+  const D = U.D, days = [...new Set(D.shifts.filter(s => s.hours > 0).map(s => s.date))].sort().reverse();
+  $('main').innerHTML = `<div class="panel"><h2>Attendance</h2><p class="lead">${days.length} day${days.length === 1 ? '' : 's'} worked in ${monLbl(D.month)} · ${Math.round(D.hours)} hours</p>${waffle()}${dayBox()}
+    <button class="btn btn-ghost wide" style="margin-top:14px" onclick="fixSheet()">Report a wrong or missing punch</button></div>
+  <div class="panel"><h2>Every shift</h2>
+    ${days.map(d => { const inf = dayInfo(d); return `<div class="shift" style="flex-wrap:wrap"><div style="min-width:120px"><b>${dayLbl(d)}</b></div><div class="num">${inf.sh.map(s => s.in + '–' + s.out).join(', ')}</div><div class="sp"></div><b class="num">${inf.h.toFixed(1)} h</b></div>`; }).join('') || '<p class="muted">No shifts recorded this month yet.</p>'}</div>`;
+}
+function pay() {
+  const D = U.D, e = D.emp, c = D.calc, P = D.pay;
+  const H = (D.history || []).slice().sort((a, b) => a.month.localeCompare(b.month));
+  if (!H.some(h => h.month === D.month)) H.push({ month: D.month, net: P.net, live: true }); H.sort((a, b) => a.month.localeCompare(b.month));
+  const mx = Math.max(1, ...H.map(h => +h.net));
+  const rate = e.payType === 'FIXED' ? `Fixed salary of ${rs(e.plan)} a month, paid for days worked out of ${c.workDays} working days.`
+    : `Hourly pay at ${rs(c.rate)} an hour (₹${Number(e.plan).toLocaleString('en-IN')} a month ÷ ${c.calDays} days ÷ ${e.duty} hours). ${c.creditDays ? `Includes ${c.creditDays} paid week-off day${c.creditDays > 1 ? 's' : ''}.` : ''}`;
+  $('main').innerHTML = `
+  <div class="slip"><div class="slip-head"><i class="lgimg" aria-hidden="true"></i><div><b>Payslip · ${monLbl(D.month)}</b><span>${esc(e.name)} · ${e.id} · ${esc(e.branchName)}</span></div></div>
+   <div class="slip-body">
+    <div class="sec">Earnings</div>
+    <div class="ln"><div class="k">${e.payType === 'FIXED' ? 'Salary for days worked' : 'Pay for hours worked'}<small>${(+P.days).toLocaleString('en-IN')} days · ${Math.round(D.hours)} hours</small></div><div class="v">${rs(P.base)}</div></div>
+    <div class="ln"><div class="k">Overtime</div><div class="v">${rs(P.ot)}</div></div>
+    ${(D.additions || []).map(a => `<div class="ln"><div class="k">${esc(a.category)}<small>${esc(a.note)}</small></div><div class="v">${rs(a.amount)}</div></div>`).join('')}
+    <div class="sec">Deductions</div>
+    ${(D.deductions || []).map(d => `<div class="ln minus"><div class="k">${esc(cat(d.category))}<small>${esc(d.note)}</small></div><div class="v">−${rs(d.amount)}</div></div>`).join('') || '<div class="ln"><div class="k muted">No deductions this month</div><div class="v">₹0</div></div>'}
+    <div class="net"><b>Take-home pay</b><span class="num">${rs(Math.max(0, P.net))}</span></div>
+    <p class="how">${D.final ? 'These are the final figures from the payroll for this month.' : 'This is an estimate from your punches so far. The final amount is fixed when payroll is closed.'} ${rate}</p>
+    <button class="btn btn-ghost noprint" onclick="window.print()">Print or save as PDF</button>
+   </div></div>
+  <div class="panel" style="margin-top:14px"><h2>Take-home by month</h2><p class="lead">Tap a month to open it.</p>
+    <div class="bars">${H.map(h => `<button class="bar ${h.month === D.month ? 'on' : ''}" onclick="load('${h.month}')" aria-label="${monLbl(h.month)}: ${rs(h.net)}"><b>${rs(h.net)}</b><i style="height:${Math.max(4, h.net / mx * 110)}px;${h.live ? 'opacity:.6' : ''}"></i><span>${MN[Number(h.month.slice(5)) - 1].slice(0, 3)}</span></button>`).join('')}</div></div>`;
+}
+const cat = c => ({ 'UNI/HYG/TRNG': 'Uniform, hygiene or training', 'TSHIRT/EQUIP': 'T-shirt or equipment', 'T-SHIRT/EQUIP': 'T-shirt or equipment', 'CASH SHORT': 'Cash shortage', COMPLAINT: 'Customer complaint', DISCIPLINE: 'Discipline', ADVANCE: 'Salary advance' }[c] || c);
+const stTag = s => s === 'ACCEPTED' ? '<span class="tag t-ok">Accepted</span>' : s === 'REJECTED' ? '<span class="tag t-bad">Rejected</span>' : '<span class="tag t-warn">Answer needed</span>';
+
+/* ---------- shifts (accept / reject) ---------- */
+async function loadShifts() { try { const r = await api({ action: 'staffShifts', id: U.id, pin: U.pin }); U.shifts = r.shifts; render(); } catch (e) {} }
+function shiftsTab() {
+  const L = U.shifts.filter(s => s.canAnswer), O = U.sh;
+  $('main').innerHTML = `<div class="panel"><h2>Planned shifts</h2><p class="lead">Accept the shifts you can work. If you can't, reject and tell your manager why. <span class="ta">ஏற்கவும் அல்லது மறுக்கவும்</span></p>
+  ${L.map(s => {
+    const open = O.open === s.shiftId; let body = '';
+    if (s.status === 'PENDING' || open) body = open && O.mode === 'REJECT'
+      ? `<textarea id="fb" rows="2" maxlength="300" placeholder="Why can't you work this shift?"></textarea><div class="ans"><button class="btn btn-ghost" onclick="U.sh.open=null;render()">Back</button><button class="btn rej" onclick="answer('${s.shiftId}','REJECT')">Send</button></div>`
+      : `<div class="ans"><button class="btn acc" onclick="answer('${s.shiftId}','ACCEPT')">Accept</button><button class="btn rej" onclick="U.sh={open:'${s.shiftId}',mode:'REJECT'};render();$('fb').focus()">Reject</button></div>`;
+    else body = `${s.status === 'REJECTED' && s.feedback ? `<div class="muted" style="font-size:14px;margin-top:4px">Your reason: “${esc(s.feedback)}”</div>` : ''}<button class="btn btn-quiet" onclick="U.sh={open:'${s.shiftId}',mode:''};render()">Change my answer</button>`;
+    return `<div class="sitem"><div class="row"><b>${dayLbl(s.date)} · ${s.start}–${s.end}</b>${stTag(s.status)}</div><div class="muted" style="font-size:14px">${esc(s.store)} · ${s.hours} h${s.note ? ' · ' + esc(s.note) : ''}</div>${body}<div class="note bad hide" id="e-${s.shiftId}"></div></div>`;
+  }).join('') || '<p class="muted">No shifts planned for you yet. Your manager will add them here.</p>'}</div>`;
+}
+async function answer(id, ans) {
+  const fb = ans === 'REJECT' ? (($('fb') || {}).value || '').trim() : '';
+  const eb = $('e-' + id);
+  if (ans === 'REJECT' && fb.length < 3) { eb.textContent = 'Write a short reason so your manager can plan around it.'; return eb.classList.remove('hide'); }
+  try { const r = await api({ action: 'staffRespond', id: U.id, pin: U.pin, shiftId: id, answer: ans, feedback: fb }); const s = U.shifts.find(x => x.shiftId === id); s.status = r.status; s.feedback = fb; U.sh = { open: null, mode: '' }; render(); }
+  catch (e) { eb.textContent = e.message; eb.classList.remove('hide'); }
+}
+
+/* ---------- my details ---------- */
+const FIELDS = [['phone', 'Mobile number', 'tel'], ['altPhone', 'Other mobile number', 'tel'], ['email', 'Email', 'email'], ['address', 'Home address', 'text'],
+  ['emergencyName', 'Emergency contact name', 'text'], ['emergencyPhone', 'Emergency contact number', 'tel'], ['acctName', 'Name on bank account', 'text'], ['bankAcct', 'Bank account number', 'text'], ['ifsc', 'IFSC code', 'text']];
+function me() {
+  const e = U.D.profile, R = U.D.requests || [];
+  const v = k => e[k] ? esc(e[k]) : '<span class="muted" style="font-weight:500">Not added</span>';
+  $('main').innerHTML = `
+  <div class="panel"><h2>Work</h2>
+    <dl class="kv" style="margin-top:10px"><dt>WAFF number</dt><dd>${e.id}</dd><dt>Branch</dt><dd>${esc(e.branchName)}</dd>
+      <dt>Pay type</dt><dd>${e.payType === 'FIXED' ? 'Fixed monthly' : 'Hourly'}</dd><dt>${e.payType === 'FIXED' ? 'Monthly salary' : 'Planned monthly pay'}</dt><dd>${rs(e.plan)}</dd><dt>Shift length</dt><dd>${e.duty} hours</dd></dl>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">Your manager updates these. If something is wrong, tell your manager.</p></div>
+  <div class="panel"><div class="row"><h2 style="margin:0">Personal and bank details</h2><div class="sp"></div><button class="btn btn-ghost" onclick="editSheet()">Update</button></div>
+    <dl class="kv" style="margin-top:12px">${FIELDS.map(([k, l]) => `<dt>${l}</dt><dd>${v(k)}</dd>`).join('')}</dl>
+    <p class="muted" style="font-size:13px;margin:12px 0 0">Changes go to your manager to approve. Bank changes are checked before your next salary.</p></div>
+  ${R.length ? `<div class="panel"><h2>Your requests</h2>${R.map(r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {}
+      const what = r.kind === 'CORRECTION' ? `Punch correction for ${dayLbl(d.date)}, ${d.inT}–${d.outT}` : 'Update ' + Object.keys(d).map(k => (FIELDS.find(f => f[0] === k) || [k, k])[1].toLowerCase()).join(', ');
+      return `<div class="req"><div class="sp">${esc(what)}<div class="muted" style="font-size:12.5px">${String(r.createdAt).slice(0, 10)}${r.decisionNote ? ' · ' + esc(r.decisionNote) : ''}</div></div>${r.status === 'PENDING' ? '<span class="tag t-warn">Waiting</span>' : r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Not approved</span>'}</div>`; }).join('')}</div>` : ''}
+  <div class="panel"><h2>PIN and sign out</h2><p class="lead">Change the PIN you use to punch in and sign in here.</p>
+    <div class="row"><button class="btn btn-ghost" onclick="pinSheet()">Change PIN</button><div class="sp"></div><button class="btn btn-quiet" onclick="signOut()">Sign out</button></div></div>`;
+}
+function openSheet(html) { $('sheetbox').innerHTML = html; $('sheet').classList.remove('hide'); const f = $('sheetbox').querySelector('input,textarea'); if (f) setTimeout(() => f.focus(), 50); }
+function closeSheet() { $('sheet').classList.add('hide'); }
+function sheetMsg(cls, m) { const n = $('s-msg'); n.className = 'note ' + cls; n.textContent = m; n.classList.remove('hide'); }
+function editSheet() {
+  const e = U.D.profile;
+  openSheet(`<h3>Update your details</h3><p class="muted" style="margin:0 0 6px">Fill in only what you want to change.</p><div class="fgrid">
+    ${FIELDS.map(([k, l, t]) => `<label for="f-${k}">${l}</label><input class="in" id="f-${k}" type="${t === 'tel' ? 'tel' : t === 'email' ? 'email' : 'text'}" ${t === 'tel' ? 'inputmode="tel" maxlength="15"' : ''} placeholder="${k === 'bankAcct' ? 'Full account number' : esc(e[k] || '')}" ${k === 'ifsc' ? 'style="text-transform:uppercase"' : ''}>`).join('')}</div>
+    <div class="note hide" id="s-msg"></div>
+    <div class="ans"><button class="btn btn-ghost" onclick="closeSheet()">Cancel</button><button class="btn btn-syrup" id="s-go" onclick="sendProfile()">Send to manager</button></div>`);
+}
+async function sendProfile() {
+  const data = {}; FIELDS.forEach(([k]) => { const v = $('f-' + k).value.trim(); if (v) data[k] = v; });
+  if (!Object.keys(data).length) return sheetMsg('bad', 'Fill in at least one detail to change.');
+  $('s-go').disabled = true;
+  try { await api({ action: 'staffRequest', id: U.id, pin: U.pin, kind: 'PROFILE', data }); closeSheet(); await load(U.D.month); U.tab = 'me'; render(); }
+  catch (e) { sheetMsg('bad', e.message); $('s-go').disabled = false; }
+}
+function fixSheet(day) {
+  const t = todayIST();
+  openSheet(`<h3>Report a wrong or missing punch</h3><p class="muted" style="margin:0 0 6px">Tell your manager the times you really worked. They will check and fix your attendance.</p><div class="fgrid">
+    <label for="c-date">Date</label><input class="in" id="c-date" type="date" max="${t}" value="${day || t}">
+    <div class="ans" style="margin-top:0"><div><label for="c-in">Started at</label><input class="in" id="c-in" type="time"></div><div><label for="c-out">Finished at</label><input class="in" id="c-out" type="time"></div></div>
+    <label for="c-why">What happened?</label><textarea id="c-why" rows="3" maxlength="300" placeholder="For example: phone battery died, could not punch out"></textarea></div>
+    <div class="note hide" id="s-msg"></div>
+    <div class="ans"><button class="btn btn-ghost" onclick="closeSheet()">Cancel</button><button class="btn btn-syrup" id="s-go" onclick="sendFix()">Send to manager</button></div>`);
+}
+async function sendFix() {
+  const data = { date: $('c-date').value, inT: $('c-in').value, outT: $('c-out').value, reason: $('c-why').value.trim() };
+  $('s-go').disabled = true;
+  try { await api({ action: 'staffRequest', id: U.id, pin: U.pin, kind: 'CORRECTION', data }); sheetMsg('ok', 'Sent. Your manager will review it.'); setTimeout(async () => { closeSheet(); await load(U.D.month); }, 900); }
+  catch (e) { sheetMsg('bad', e.message); $('s-go').disabled = false; }
+}
+function pinSheet() {
+  openSheet(`<h3>Change PIN</h3><p class="muted" style="margin:0 0 6px">Use 4 digits that are not easy to guess, like 1234 or 1111.</p><div class="fgrid">
+    <label for="p-new">New PIN</label><input class="in" id="p-new" type="password" inputmode="numeric" maxlength="4">
+    <label for="p-new2">Type it again</label><input class="in" id="p-new2" type="password" inputmode="numeric" maxlength="4"></div>
+    <div class="note hide" id="s-msg"></div>
+    <div class="ans"><button class="btn btn-ghost" onclick="closeSheet()">Cancel</button><button class="btn btn-syrup" id="s-go" onclick="sendPin()">Change PIN</button></div>`);
+}
+async function sendPin() {
+  const a = $('p-new').value, b = $('p-new2').value;
+  if (a !== b) return sheetMsg('bad', 'The two PINs are different. Type the same PIN twice.');
+  $('s-go').disabled = true;
+  try { await api({ action: 'staffPin', id: U.id, pin: U.pin, newPin: a }); U.pin = a; sheetMsg('ok', 'PIN changed. Use the new PIN from now on.'); setTimeout(closeSheet, 1400); }
+  catch (e) { sheetMsg('bad', e.message); $('s-go').disabled = false; }
+}
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+</script>
+</body>
+</html>

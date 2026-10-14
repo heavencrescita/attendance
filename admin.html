@@ -288,7 +288,7 @@ function derivePlan() {
 function render() {
   const D = ST.D, isAdmin = D.role === 'admin';
   const tabs = [['overview', 'Overview'], ['daily', 'Daily attendance'], ['flags', 'Review', D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length],
-    ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll']];
+    ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll'], ['reqs', 'Staff requests', (D.requests || []).filter(r => r.status === 'PENDING').length]];
   if (isAdmin) tabs.push(['stores', 'Stores'], ['users', 'Users']);
   $('#app').innerHTML = `
   <div class="top"><div class="logo">BWC</div><div><h1>The Belgian Waffle Cafe</h1><div class="sub">Attendance &amp; payroll admin</div></div><div class="sp"></div>
@@ -296,7 +296,7 @@ function render() {
     <button class="pill" onclick="pwDialog()"><b>${esc(D.user)}</b> · ${D.role}</button><button class="pill" onclick="logout()">Sign out</button></div>
   <nav>${tabs.map(([k, l, n]) => `<button class="${ST.tab === k ? 'on' : ''}" onclick="go('${k}')">${l}${n ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</nav>
   <main id="main"></main>`;
-  ({ overview, daily, flags, shifts: shiftPlan, emps, regs, pay, stores, users })[ST.tab]();
+  ({ overview, daily, flags, shifts: shiftPlan, emps, regs, pay, stores, users, reqs })[ST.tab]();
 }
 function go(t) { ST.tab = t; render(); window.scrollTo(0, 0); }
 function closeDrawer() { $('#drawer').classList.remove('on'); }
@@ -439,6 +439,7 @@ function actionItems() {
   const mo = D.issues.filter(i => i.kind === 'Missing OUT').length; if (mo) a.push({ t: `${mo} shift(s) missing a punch-out`, go: 'flags' });
   if (D.unmatched.length) a.push({ t: `${D.unmatched.length} attendance rows have no WAFF ID — not paid`, d: [...new Set(D.unmatched.map(u => u.name))].join(', ') });
   if (D.notInV9.length) a.push({ t: `${D.notInV9.length} employee(s) worked but are missing from the V9 payroll`, d: D.notInV9.map(x => x.e.name).join(', '), go: 'pay' });
+  const rq = (D.requests || []).filter(r => r.status === 'PENDING').length; if (rq) a.push({ t: `${rq} staff request(s) from My BWC to approve`, go: 'reqs' });
   const rej = (D.plan.rows || []).filter(r => r.s.status === 'REJECTED').length; if (rej) a.push({ t: `${rej} planned shift(s) rejected by staff`, go: 'shifts' });
   return a;
 }
@@ -858,6 +859,24 @@ async function saveStore() {
 }
 
 /* ---------------- USERS (admin) ---------------- */
+/* ---------------- STAFF REQUESTS (from My BWC) ---------------- */
+const REQ_F = { phone: 'Mobile', altPhone: 'Other mobile', email: 'Email', address: 'Address', emergencyName: 'Emergency contact', emergencyPhone: 'Emergency number', bankAcct: 'Bank account', ifsc: 'IFSC', acctName: 'Name on account' };
+function reqs() {
+  const D = ST.D, R = (D.requests || []).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const pend = R.filter(r => r.status === 'PENDING'), done = R.filter(r => r.status !== 'PENDING');
+  const body = r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {} const e = D.emp[r.empId] || {};
+    if (r.kind === 'CORRECTION') return `<b>Missing or wrong punch</b> · ${esc(d.date)} · ${esc(d.inT)}–${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
+    return `<b>Update details</b><table style="margin-top:6px"><tbody>${Object.keys(d).map(k => `<tr><td class="muted">${REQ_F[k] || k}</td><td>${esc(e[k] || '—')}</td><td>→</td><td><b>${esc(d[k])}</b></td></tr>`).join('')}</tbody></table>`; };
+  $('#main').innerHTML = `<div class="card"><h2>Waiting for you · ${pend.length}</h2>
+    <p class="muted" style="margin-top:-6px">Staff send these from My BWC (heavencrescita.github.io/attendance/me.html). Approving a punch correction adds a manual IN and OUT; approving details updates the employee record.</p>
+    ${pend.map(r => `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span></div></div>
+      <div style="margin:8px 0">${body(r)}</div>
+      <div class="row"><input type="text" id="rn-${r.requestId}" placeholder="Note to the employee (optional)" style="flex:1"><button class="btn g" onclick="decide('${r.requestId}','APPROVE')">Approve</button><button class="btn r" onclick="decide('${r.requestId}','REJECT')">Reject</button></div></div>`).join('') || '<p class="muted">Nothing to review.</p>'}</div>
+  ${done.length ? `<div class="card" style="margin-top:14px"><h2>Recently decided</h2><div class="scroll"><table><thead><tr><th>When</th><th>Employee</th><th>Request</th><th>Decision</th><th>By</th></tr></thead><tbody>
+    ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+async function decide(id, decision) { await act({ action: 'reviewRequest', requestId: id, decision, note: ($('#rn-' + id) || {}).value || '' }, decision === 'APPROVE' ? 'Approved' : 'Rejected'); }
+
 function users() {
   const D = ST.D;
   $('#main').innerHTML = `<div class="card"><h2>Dashboard users</h2>
