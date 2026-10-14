@@ -7,9 +7,9 @@
 <title>BWC Attendance Admin</title>
 <style>
 :root{--yellow:#fff200;--black:#0d0d0d;--teal:#27bdbe;--bg:#f5f5f0;--card:#fff;--ink:#151515;--muted:#6b6b66;--line:#e4e4dc;--chip:#f0f0ea;
---ok:#1a7f37;--ok-bg:#e6f4ea;--warn:#9a5b00;--warn-bg:#fff4dc;--bad:#b4232b;--bad-bg:#fde8e8}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}}
-:root[data-theme="dark"]{--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}
+--c1:#1a9fa0;--c2:#5b5bd6;--ok:#1a7f37;--ok-bg:#e6f4ea;--warn:#9a5b00;--warn-bg:#fff4dc;--bad:#b4232b;--bad-bg:#fde8e8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c1:#1fa8a9;--c2:#7b7be6;--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}}
+:root[data-theme="dark"]{--c1:#1fa8a9;--c2:#7b7be6;--bg:#121212;--card:#1c1c1b;--ink:#f2f2ee;--muted:#a3a39b;--line:#2e2e2b;--chip:#262624;--ok-bg:#16301f;--warn-bg:#33270f;--bad-bg:#3a1a1c;--ok:#5fd17f;--warn:#f0b445;--bad:#ff7a80}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px}
 button,input,select{font:inherit;color:inherit}
@@ -27,6 +27,22 @@ nav .n{background:var(--yellow);color:#000;border-radius:999px;padding:0 6px;fon
 main{max-width:1280px;margin:0 auto;padding:20px}
 .grid{display:grid;gap:14px}.grid>*{min-width:0}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.kpis5{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.dl{display:inline-block;margin-left:4px;font-weight:600;color:var(--muted)}.dl.g{color:var(--ok)}.dl.b{color:var(--bad)}
+.seg{display:inline-flex;background:var(--chip);border-radius:10px;padding:3px}.seg button{border:0;background:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:600;color:var(--muted)}.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mchips{display:flex;gap:6px;flex-wrap:wrap}.mchips button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13px}.mchips button.on{background:var(--black);color:var(--yellow);border-color:var(--black)}
+.btn.act{background:var(--warn-bg);color:var(--warn)}
+.three{grid-template-columns:repeat(3,1fr)}@media(max-width:1000px){.three{grid-template-columns:1fr}}
+.lg{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin-left:10px}.lg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.sbar{display:flex;gap:2px;height:12px;align-items:stretch}.sbar i{display:block;border-radius:0 4px 4px 0}.sbar i:first-child{border-radius:4px}
+.rank td{padding:7px 8px}
+.cols{display:flex;align-items:flex-end;gap:4px;padding-top:4px}.col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0;cursor:default}
+.col i{display:block;width:70%;max-width:46px;background:var(--c1);border-radius:4px 4px 0 0}.col.on i{background:var(--c2)}.col.ghost i{opacity:.45}.col:hover i{filter:brightness(1.12)}
+.col .cv{font-size:11px;color:var(--ink);font-weight:600;margin-bottom:3px;white-space:nowrap}.col .ck{font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;height:14px}
+.heat{border-collapse:separate;border-spacing:2px}.heat th,.heat td{padding:0;border:0;text-align:center;font-size:11px}.heat th{font-weight:600;line-height:1.15;padding:2px 0;min-width:24px}.heat th span{font-weight:400;color:var(--muted)}.heat th.we{color:var(--c2)}
+.heat td:first-child,.heat th:first-child{text-align:left;padding-right:10px;font-size:12.5px}.heat td.hc{width:24px;height:24px;border-radius:4px;background:rgba(26,159,160,var(--a));color:var(--ink)}
+.heat tr.tot td{color:var(--muted);font-weight:600;padding-top:4px}.heat td.num{padding-left:8px}
+
 .two{grid-template-columns:1.4fr 1fr}@media(max-width:900px){.two{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
 .kpi .l{color:var(--muted);font-size:12px;font-weight:500}.kpi .v{font-size:26px;font-weight:800;margin-top:4px}.kpi .s{color:var(--muted);font-size:12px;margin-top:2px}
@@ -203,7 +219,14 @@ function logout() { api({ action: 'logout' }).catch(() => {}); ST.token = null; 
 async function load() {
   document.body.classList.add('loading');
   try {
-    const D = await api({ action: 'bootstrap', month: ST.month });
+    let D = await api({ action: 'bootstrap', month: ST.month });
+    // First open: if this month has nothing yet, jump to the latest month that has data
+    if (!ST.picked && !store('bwc_month')) {
+      ST.picked = true;
+      const ms = ((D.history || {}).months || []).filter(m => m < D.month), hasNow = (D.punches || []).length >= 20;
+      if (!hasNow && ms.length) { ST.month = ms[ms.length - 1]; D = await api({ action: 'bootstrap', month: ST.month }); }
+    }
+    ST.picked = true;
     ST.D = D; derive(); render();
   } finally { document.body.classList.remove('loading'); }
 }
@@ -220,8 +243,12 @@ function derive() {
     b.issues.forEach(i => D.issues.push(Object.assign({ emp: e }, i)));
   });
   D.flagged = D.punches.filter(p => p.status === 'FLAGGED').sort((a, b) => Number(b.epoch) - Number(a.epoch));
-  D.pay = D.employees.map(e => ({ e, r: calcPay(e, D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }) }));
   D.v9 = Object.fromEntries((D.v9Ref || []).map(v => [v.empId, v]));
+  // For an imported month, pay each person on the terms they had that month (salary, branch, status), not today's
+  const asOf = e => { const v = D.v9[e.id]; if (!v || v.plan === '' || v.plan == null) return e;
+    return Object.assign({}, e, { name: v.name || e.name, branch: v.branch || e.branch, payType: v.payType || e.payType, plan: Number(v.plan), duty: Number(v.duty) || e.duty,
+      status: v.status || e.status, woEligible: v.woEligible || e.woEligible, woDays: v.woDays === '' ? e.woDays : v.woDays, dailyRate: Number(v.dailyRate) || 0 }); };
+  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }) }));
   D.hasV9 = (D.v9Ref || []).length > 0;
   D.unmatched = (D.importedShifts || []).filter(r => !r.empId);
   D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
@@ -348,41 +375,191 @@ async function saveAssign() {
 }
 
 /* ---------------- OVERVIEW ---------------- */
+/* ---------------- OVERVIEW (dashboard) ---------------- */
+const MON = m => { const [y, mo] = m.split('-').map(Number); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1] + ' ' + y; };
+const pct = (a, b) => b ? a / b * 100 : 0;
+const lakh = n => Math.abs(n) >= 100000 ? '₹' + (n / 100000).toFixed(2) + 'L' : rs(n);
+// Per-employee figures for the open month: the V9 workbook is the reference when it was imported, otherwise the app's own calculation
+function monthRows() {
+  const D = ST.D;
+  return D.pay.map(x => {
+    const v = D.v9[x.e.id];
+    if (D.hasV9 && !v) return null;
+    const r = v ? { net: +v.net, base: +v.base, ot: +v.ot, ded: +v.ded, add: +v.add, hrs: x.r.workH, days: +v.days } : { net: x.r.net, base: x.r.base, ot: x.r.otPay, ded: x.r.dedT, add: x.r.addT, hrs: x.r.workH, days: x.r.days };
+    if (!v && !r.net && !r.hrs) return null;
+    return Object.assign(r, { e: x.e, branch: (v && v.branch) || x.e.branch, otH: x.r.otH });
+  }).filter(Boolean);
+}
+const sumBy = (rows, k) => rows.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+function monthTotals(rows) {
+  const net = sumBy(rows, 'net'), hrs = sumBy(rows, 'hrs'), ot = sumBy(rows, 'ot'), base = sumBy(rows, 'base'), ded = sumBy(rows, 'ded');
+  const paid = rows.filter(x => x.net > 0), shop = rows.filter(x => x.branch !== 'MGR');
+  return { net, hrs, ot, base, ded, add: sumBy(rows, 'add'), staff: paid.length, perHr: sumBy(shop, 'hrs') ? sumBy(shop, 'net') / sumBy(shop, 'hrs') : 0,
+    otShare: pct(ot, base + ot), avgDays: paid.length ? sumBy(paid, 'days') / paid.length : 0 };
+}
+// Month-level history: every month imported from a V9 workbook, plus the open month if it is live
+function historyTotals() {
+  const D = ST.D, H = D.history || { months: [], v9: [] }, out = {};
+  const clk = {}; (H.clk || []).forEach(([m, id, h]) => { clk[m + '|' + id] = h; });
+  [...new Set(H.v9.map(r => r.month))].forEach(m => {
+    out[m] = monthTotals(H.v9.filter(r => r.month === m).map(r => ({ net: +r.net, base: +r.base, ot: +r.ot, ded: +r.ded, add: +r.add, hrs: clk[m + '|' + r.empId] || 0, days: +r.days, branch: r.branch })));
+  });
+  if (!D.hasV9) { const t = monthTotals(monthRows()); if (t.net || t.hrs) out[D.month] = Object.assign(t, { live: true }); }
+  return out;
+}
+function delta(cur, prev, good) {   // good: 'up' | 'down' | null
+  if (prev == null || !isFinite(prev) || prev === 0) return '';
+  const d = (cur - prev) / Math.abs(prev) * 100; if (Math.abs(d) < 0.5) return '<span class="dl">± 0% vs prev.</span>';
+  const up = d > 0, cls = !good ? '' : (up === (good === 'up') ? 'g' : 'b');
+  return `<span class="dl ${cls}">${up ? '▲' : '▼'} ${Math.abs(d).toFixed(1)}% vs prev.</span>`;
+}
 function overview() {
+  const D = ST.D, mode = ST.ov || 'month';
+  const H = D.history || { months: [] };
+  const months = [...new Set(H.months.concat([nowMonth()]))].sort();
+  const actions = actionItems();
+  $('#main').innerHTML = `
+  <div class="row" style="margin-bottom:14px">
+    <div class="seg"><button class="${mode === 'month' ? 'on' : ''}" onclick="ST.ov='month';overview()">Month</button><button class="${mode === 'today' ? 'on' : ''}" onclick="ST.ov='today';overview()">Today · live</button></div>
+    ${mode === 'month' ? `<div class="mchips">${months.map(m => `<button class="${m === D.month ? 'on' : ''}" onclick="pickMonth('${m}')">${MON(m)}${m === nowMonth() ? ' · now' : ''}</button>`).join('')}</div>` : ''}
+    <div class="sp"></div>
+    ${actions.length ? `<button class="btn act" onclick="showActions()">⚠ Needs action <b>${actions.length}</b></button>` : '<span class="tag t-ok">✓ Nothing needs action</span>'}
+    <button class="btn" title="How pay is calculated" onclick="showRules()">ⓘ Pay rules</button>
+  </div>
+  <div id="ovb"></div>`;
+  (mode === 'today' ? todayView : monthView)();
+}
+function pickMonth(m) { ST.month = m; store('bwc_month', m); load(); }
+function actionItems() {
+  const D = ST.D, a = [], act = D.employees.filter(e => e.status === 'Active');
+  const noStore = D.stores.filter(s => s.active === 'Yes' && (s.lat === '' || s.lng === ''));
+  if (noStore.length) a.push({ t: `${noStore.length} store(s) have no location yet — every punch there is flagged until it's set`, d: noStore.map(s => s.name).join(', '), go: D.role === 'admin' ? 'stores' : '' });
+  const noPin = act.filter(e => !e.hasPin); if (noPin.length) a.push({ t: `${noPin.length} active employee(s) have no PIN and can't punch`, d: noPin.map(e => e.name).join(', '), go: 'emps' });
+  if (D.flagged.length) a.push({ t: `${D.flagged.length} flagged punch(es) to review`, go: 'flags' });
+  const mo = D.issues.filter(i => i.kind === 'Missing OUT').length; if (mo) a.push({ t: `${mo} shift(s) missing a punch-out`, go: 'flags' });
+  if (D.unmatched.length) a.push({ t: `${D.unmatched.length} attendance rows have no WAFF ID — not paid`, d: [...new Set(D.unmatched.map(u => u.name))].join(', ') });
+  if (D.notInV9.length) a.push({ t: `${D.notInV9.length} employee(s) worked but are missing from the V9 payroll`, d: D.notInV9.map(x => x.e.name).join(', '), go: 'pay' });
+  const rej = (D.plan.rows || []).filter(r => r.s.status === 'REJECTED').length; if (rej) a.push({ t: `${rej} planned shift(s) rejected by staff`, go: 'shifts' });
+  return a;
+}
+function showActions() {
+  openDrawer(`<div class="row"><h2 style="margin:0">Needs action · ${esc(ST.D.monthLabel)}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+  ${actionItems().map(x => `<div class="note" style="margin-top:12px"><b>${esc(x.t)}</b>${x.d ? `<div style="margin-top:4px;font-size:12.5px">${esc(x.d)}</div>` : ''}${x.go ? `<div style="margin-top:6px"><a href="#" onclick="closeDrawer();go('${x.go}');return false">Open →</a></div>` : ''}</div>`).join('')}`);
+}
+function showRules() {
+  const D = ST.D;
+  openDrawer(`<div class="row"><h2 style="margin:0">How pay is calculated</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+  <ol style="padding-left:18px;line-height:1.7">
+    <li>A shift under ${D.config.halfDayHrs} h counts as ½ day.</li>
+    <li>FIXED: planned × min(days, working days) ÷ working days (working days = days in month − ${D.config.weekOffsPerMonth}).</li>
+    <li>HOURLY: (hours + paid week-off hours) × planned ÷ (days in month × duty hrs). Hours above working days × duty are overtime.</li>
+    <li>Week-off days: <b>auto = 1 per 6 days worked, max ${D.config.weekOffsPerMonth}</b> until set by hand in Payroll.</li>
+    <li>NET rounded to ₹10. Only APPROVED / ACCEPTED / MANUAL punches count.</li>
+    <li>Months imported from a V9 workbook show the workbook's own figures on this dashboard.</li></ol>`);
+}
+// Column chart (one series) — values [{k,label,v,title}]
+function colChart(vals, fmt, opt) {
+  opt = opt || {}; const max = Math.max(1, ...vals.map(x => x.v)), h = opt.h || 120;
+  return `<div class="cols" style="height:${h + 34}px">${vals.map(x => `<div class="col ${x.on ? 'on' : ''} ${x.ghost ? 'ghost' : ''}" title="${esc(x.title || (x.label + ': ' + fmt(x.v)))}">
+    <span class="cv">${opt.noLabels ? '' : fmt(x.v)}</span><i style="height:${Math.max(x.v ? 2 : 0, x.v / max * h).toFixed(1)}px"></i><span class="ck">${esc(x.label)}</span></div>`).join('')}</div>`;
+}
+function monthView() {
+  const D = ST.D, rows = monthRows(), T = monthTotals(rows);
+  const HT = historyTotals(), hm = Object.keys(HT).sort(), prevM = hm.filter(m => m < D.month).pop(), P = prevM ? HT[prevM] : null;
+  const src = D.hasV9 ? `<span class="tag t-ok">Figures from the V9 workbook</span>` : `<span class="tag t-mute">Live from punches${D.month === nowMonth() ? ' · month in progress' : ''}</span>`;
+  if (!rows.length) { $('#ovb').innerHTML = `<div class="card"><h2>${esc(D.monthLabel)}</h2><p class="muted">No attendance or payroll for this month yet. Pick a month above${hm.length ? ` — the latest with data is <a href="#" onclick="pickMonth('${hm[hm.length - 1]}');return false">${MON(hm[hm.length - 1])}</a>` : ''}.</p></div>`; return; }
+  // branches
+  const bm = {}; rows.forEach(x => { const b = bm[x.branch] = bm[x.branch] || { b: x.branch, net: 0, base: 0, ot: 0, ded: 0, hrs: 0, n: 0 }; b.net += x.net; b.base += x.base; b.ot += x.ot; b.ded += x.ded; b.hrs += x.hrs; if (x.net > 0) b.n++; });
+  const brs = Object.values(bm).filter(b => b.net || b.hrs).sort((a, b) => b.net - a.net), maxB = Math.max(1, ...brs.map(b => b.base + b.ot));
+  const avgHr = T.perHr;
+  const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
+    return `<b>${rs(r)}</b> ${d > 12 ? `<span class="tag t-warn">▲ ${d.toFixed(0)}% above avg</span>` : d < -12 ? `<span class="tag t-ok">▼ ${(-d).toFixed(0)}% below avg</span>` : '<span class="tag t-mute">≈ avg</span>'}`; };
+  const otTag = b => { const s = pct(b.ot, b.base + b.ot); return s >= 10 ? `<span class="tag t-bad">${s.toFixed(0)}%</span>` : s >= 5 ? `<span class="tag t-warn">${s.toFixed(0)}%</span>` : `<span class="muted">${s.toFixed(0)}%</span>`; };
+  // shifts in the month
+  const shifts = []; D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => { if (s.date.slice(0, 7) === D.month && s.hours > 0) shifts.push(Object.assign({ emp: e }, s)); }));
+  const dim = daysInMonth(D.month), days = Array.from({ length: dim }, (_, i) => D.month + '-' + String(i + 1).padStart(2, '0'));
+  const hb = {}; shifts.forEach(s => { const k = s.store || s.emp.branch; (hb[k] = hb[k] || {})[s.date] = (hb[k][s.date] || 0) + 1; });
+  const hbRows = Object.keys(hb).sort((a, b) => branchName(a).localeCompare(branchName(b)));
+  const hmax = Math.max(1, ...hbRows.flatMap(k => Object.values(hb[k])));
+  const dayTot = days.map(d => shifts.filter(s => s.date === d).length);
+  const wd = d => new Date(d + 'T12:00:00+05:30').getDay();
+  const dowAvg = [1, 2, 3, 4, 5, 6, 0].map(w => { const ds = days.filter(d => wd(d) === w), v = ds.reduce((s, d, i) => s + dayTot[days.indexOf(d)], 0) / Math.max(1, ds.length); return { label: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w], v }; });
+  const starts = Array.from({ length: 24 }, (_, h) => ({ label: h % 3 === 0 ? String(h).padStart(2, '0') : '', v: shifts.filter(s => Number(String(s.in).slice(0, 2)) === h).length, title: '' }))
+    .map((x, h) => Object.assign(x, { title: `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59 · ${x.v} shifts started` }));
+  const long = shifts.filter(s => s.hours > 12), longBy = {}; long.forEach(s => { const k = s.store || s.emp.branch; longBy[k] = (longBy[k] || 0) + 1; });
+  // people
+  const paid = rows.filter(x => x.net > 0);
+  const bins = [0, 5000, 10000, 15000, 20000, 25000, 30000, Infinity], binL = ['<5K', '5–10K', '10–15K', '15–20K', '20–25K', '25–30K', '30K+'];
+  const payHist = binL.map((l, i) => ({ label: l, v: paid.filter(x => x.net >= bins[i] && x.net < bins[i + 1]).length, title: `${l}: ${paid.filter(x => x.net >= bins[i] && x.net < bins[i + 1]).length} people` }));
+  const dBins = [[0, 5], [5, 10], [10, 15], [15, 20], [20, 25], [25, 99]], dL = ['<5', '5–9', '10–14', '15–19', '20–24', '25+'];
+  const dayHist = dBins.map(([a, b], i) => ({ label: dL[i], v: paid.filter(x => x.days >= a && x.days < b).length, title: `${dL[i]} days worked: ${paid.filter(x => x.days >= a && x.days < b).length} people` }));
+  const topH = paid.slice().sort((a, b) => b.hrs - a.hrs).slice(0, 8), topOT = paid.filter(x => x.ot > 0).sort((a, b) => b.ot - a.ot).slice(0, 8);
+  const trend = hm.map(m => ({ label: MON(m), v: HT[m].net, on: m === D.month, ghost: HT[m].live, title: `${MON(m)}: ${rs(HT[m].net)} pay · ${Math.round(HT[m].hrs).toLocaleString('en-IN')} h${HT[m].live ? ' (live)' : ''}` }));
+  const trendH = hm.map(m => ({ label: MON(m), v: HT[m].hrs, on: m === D.month, ghost: HT[m].live, title: `${MON(m)}: ${Math.round(HT[m].hrs).toLocaleString('en-IN')} hours worked` }));
+  $('#ovb').innerHTML = `
+  <div class="row" style="margin-bottom:10px"><h2 style="margin:0;font-size:18px">${esc(D.monthLabel)}</h2>${src}${P ? `<span class="muted" style="font-size:12px">compared with ${MON(prevM)}</span>` : ''}</div>
+  <div class="grid kpis5">
+    <div class="card kpi accent"><div class="l">Total pay (NET)</div><div class="v">${lakh(T.net)}</div><div class="s">${T.staff} people paid ${delta(T.net, P && P.net)}</div></div>
+    <div class="card kpi"><div class="l">Hours worked (clocked)</div><div class="v">${Math.round(T.hrs).toLocaleString('en-IN')}</div><div class="s">avg ${T.avgDays.toFixed(1)} days / person ${delta(T.hrs, P && P.hrs)}</div></div>
+    <div class="card kpi"><div class="l">Pay per hour · outlets</div><div class="v">${rs(T.perHr)}</div><div class="s">excl. roaming managers ${delta(T.perHr, P && P.perHr, 'down')}</div></div>
+    <div class="card kpi"><div class="l">Overtime pay</div><div class="v">${rs(T.ot)}</div><div class="s">${T.otShare.toFixed(1)}% of earned pay ${delta(T.ot, P && P.ot, 'down')}</div></div>
+    <div class="card kpi"><div class="l">Deductions</div><div class="v">${rs(T.ded)}</div><div class="s">${T.add ? rs(T.add) + ' additions' : 'no additions'} ${delta(T.ded, P && P.ded)}</div></div>
+  </div>
+  <div class="grid two" style="margin-top:14px">
+    <div class="card"><div class="row"><h2 style="margin:0">Branches ranked by pay</h2><div class="sp"></div>
+      <span class="lg"><i style="background:var(--c1)"></i>Base pay</span><span class="lg"><i style="background:var(--c2)"></i>Overtime</span></div>
+      <div class="scroll" style="margin-top:8px"><table class="rank"><thead><tr><th>Branch</th><th class="num">Staff</th><th class="num">Hours</th><th style="width:30%">Pay</th><th class="num">NET</th><th>₹ / hour</th><th class="num">OT share</th></tr></thead><tbody>
+      ${brs.map(b => `<tr class="click" onclick="ST.branch='${b.b}';go('pay')" title="${esc(branchName(b.b))}: base ${rs(b.base)} · OT ${rs(b.ot)} · deductions ${rs(b.ded)}">
+        <td><b>${esc(branchName(b.b))}</b></td><td class="num">${b.n}</td><td class="num">${Math.round(b.hrs).toLocaleString('en-IN')}</td>
+        <td><div class="sbar"><i style="width:${(b.base / maxB * 100).toFixed(1)}%;background:var(--c1)"></i>${b.ot ? `<i style="width:${(b.ot / maxB * 100).toFixed(1)}%;background:var(--c2)"></i>` : ''}</div></td>
+        <td class="num"><b>${rs(b.net)}</b></td><td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime.</p></div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h2>Pay by month</h2>${trend.length > 1 ? colChart(trend, lakh) : `<p class="muted">Only one month of data so far.</p>${colChart(trend, lakh)}`}</div>
+      <div class="card"><h2>Hours worked by month</h2>${colChart(trendH, v => Math.round(v).toLocaleString('en-IN'))}</div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Staffing calendar · people on shift each day</h2><div class="sp"></div>
+    <span class="lg">fewer <span class="ramp"></span> more</span></div>
+    <div class="scroll" style="margin-top:8px"><table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Avg/day</th></tr></thead><tbody>
+    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] || 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} on shift">${v || ''}</td>`; }).join('')}<td class="num">${(tot / dim).toFixed(1)}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} shifts">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / dim).toFixed(1)}</td></tr>
+    </tbody></table></div></div>
+  <div class="grid three" style="margin-top:14px">
+    <div class="card"><h2>Average people on shift by weekday</h2>${colChart(dowAvg, v => v.toFixed(0))}</div>
+    <div class="card"><h2>When shifts start</h2>${colChart(starts, v => '', { noLabels: true })}<p class="muted" style="font-size:12px;margin:6px 0 0">Hover a bar for the count. Busiest start: <b>${String(starts.reduce((m, x, h) => x.v > starts[m].v ? h : m, 0)).padStart(2, '0')}:00</b></p></div>
+    <div class="card"><h2>Shifts longer than 12 hours</h2><div class="v" style="font-size:26px;font-weight:800">${long.length} <span class="muted" style="font-size:13px;font-weight:500">of ${shifts.length} shifts</span></div>
+      <table style="margin-top:6px"><tbody>${Object.entries(longBy).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `<tr><td>${esc(branchName(k))}</td><td class="num"><b>${v}</b></td></tr>`).join('') || '<tr><td class="muted">None</td></tr>'}</tbody></table></div>
+  </div>
+  <div class="grid three" style="margin-top:14px">
+    <div class="card"><h2>How pay is spread · ${paid.length} people</h2>${colChart(payHist, v => v)}<p class="muted" style="font-size:12px;margin:6px 0 0">Middle pay ${rs(paid.length ? paid.map(x => x.net).sort((a, b) => a - b)[Math.floor(paid.length / 2)] : 0)}</p></div>
+    <div class="card"><h2>Days worked per person</h2>${colChart(dayHist, v => v)}<p class="muted" style="font-size:12px;margin:6px 0 0">${paid.filter(x => x.days < 10).length} people worked fewer than 10 days</p></div>
+    <div class="card"><h2>Most hours</h2><table><tbody>${topH.map(x => `<tr><td><b>${esc(x.e.name)}</b> <span class="muted">${esc(branchName(x.branch))}</span></td><td class="num">${Math.round(x.hrs)} h</td></tr>`).join('')}</tbody></table></div>
+  </div>
+  ${topOT.length ? `<div class="card" style="margin-top:14px"><h2>Highest overtime pay</h2><div class="scroll"><table><thead><tr><th>Employee</th><th>Branch</th><th class="num">Hours</th><th class="num">OT pay</th><th class="num">NET</th></tr></thead><tbody>
+    ${topOT.map(x => `<tr><td><b>${esc(x.e.name)}</b> <span class="muted">${x.e.id}</span></td><td>${esc(branchName(x.branch))}</td><td class="num">${Math.round(x.hrs)}</td><td class="num"><b>${rs(x.ot)}</b></td><td class="num">${rs(x.net)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+function todayView() {
   const D = ST.D, act = D.employees.filter(e => e.status === 'Active');
   const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
   const onShift = D.issues.filter(i => i.kind === 'On shift now');
   const todayShifts = act.filter(e => D.byEmp[e.id].shifts.some(s => s.date === today) || onShift.some(i => i.emp.id === e.id && i.punch.time.slice(0, 10) === today));
-  const net = D.pay.reduce((s, x) => s + x.r.net, 0);
-  const noStore = D.stores.filter(s => s.active === 'Yes' && (s.lat === '' || s.lng === ''));
-  const noPin = act.filter(e => !e.hasPin);
-  const byB = branchCodes().map(b => { const rows = D.pay.filter(x => x.e.branch === b);
-    return { b, act: rows.filter(x => x.e.status === 'Active').length, on: onShift.filter(i => i.emp.branch === b).length, hrs: rows.reduce((s, x) => s + x.r.workH, 0), cost: rows.reduce((s, x) => s + x.r.net, 0) }; });
-  const maxC = Math.max(1, ...byB.map(x => x.cost));
-  $('#main').innerHTML = `
-  ${noStore.length ? `<div class="note"><b>${noStore.length} store(s) have no location yet</b> — every punch there is flagged until it's set: ${noStore.map(s => esc(s.name)).join(', ')}. ${D.role === 'admin' ? '<a href="#" onclick="go(\'stores\');return false">Set locations →</a>' : 'Ask an admin to set them.'}</div>` : ''}
-  ${D.hasV9 ? `<div class="note" style="background:var(--ok-bg);color:var(--ok)"><b>${esc(D.monthLabel)} is loaded from the V9 workbook.</b> App payroll matches V9 for <b>${D.v9Match} of ${D.v9Ref.length}</b> employees${D.v9Match === D.v9Ref.length ? ' — every rupee' : ''}. <a href="#" onclick="go('pay');return false">Payroll →</a></div>` : ''}
-  ${D.notInV9.length ? `<div class="note" style="background:var(--bad-bg);color:var(--bad)"><b>${D.notInV9.length} employee(s) worked this month but are missing from the V9 payroll</b> (${rs(D.notInV9.reduce((s, x) => s + x.r.net, 0))} unpaid): ${D.notInV9.map(x => esc(x.e.id + ' ' + x.e.name)).join(', ')}.</div>` : ''}
-  ${D.unmatched.length ? `<div class="note"><b>${D.unmatched.length} attendance rows have no WAFF ID</b> and are not paid by V9 or here: ${[...new Set(D.unmatched.map(u => u.name))].map(esc).join(', ')}. Add these people to the master or fix the IDs.</div>` : ''}
-  ${noPin.length ? `<div class="note"><b>${noPin.length} active employee(s) have no PIN</b> and can't punch yet. <a href="#" onclick="go('emps');return false">Issue PINs →</a></div>` : ''}
+  const byB = branchCodes().map(b => ({ b, act: act.filter(e => e.branch === b).length, on: onShift.filter(i => i.punch.store === b || (i.emp.branch === b && !i.punch.store)).length,
+    done: todayShifts.filter(e => e.branch === b).length, miss: D.issues.filter(i => i.kind === 'Missing OUT' && i.emp.branch === b).length }));
+  const isNow = D.month === nowMonth();
+  $('#ovb').innerHTML = `
+  ${isNow ? '' : `<div class="note">You're looking at ${esc(D.monthLabel)}. Live numbers are for today — <a href="#" onclick="pickMonth('${nowMonth()}');return false">switch to ${MON(nowMonth())}</a>.</div>`}
   <div class="grid kpis">
     <div class="card kpi accent"><div class="l">On shift right now</div><div class="v">${onShift.length}</div><div class="s">punched IN, not yet OUT</div></div>
     <div class="card kpi"><div class="l">Worked today</div><div class="v">${todayShifts.length}</div><div class="s">of ${act.length} active employees</div></div>
-    <div class="card kpi"><div class="l">To review</div><div class="v">${D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length}</div><div class="s">${D.flagged.length} flagged punches · ${D.issues.filter(i => i.kind === 'Missing OUT').length} missing OUT</div></div>
-    <div class="card kpi"><div class="l">Payroll NET so far · ${esc(D.monthLabel)}</div><div class="v">${rs(net)}</div><div class="s">from approved shifts</div></div>
+    <div class="card kpi"><div class="l">To review</div><div class="v">${D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length}</div><div class="s">${D.flagged.length} flagged · ${D.issues.filter(i => i.kind === 'Missing OUT').length} missing OUT</div></div>
   </div>
   <div class="grid two" style="margin-top:14px">
-    <div class="card"><h2>By branch · ${esc(D.monthLabel)}</h2><div class="scroll"><table>
-      <thead><tr><th>Branch</th><th class="num">Active</th><th class="num">On shift</th><th class="num">Hours</th><th class="num">NET</th><th style="width:26%"></th></tr></thead>
-      <tbody>${byB.map(x => `<tr class="click" onclick="ST.branch='${x.b}';go('pay')"><td><b>${esc(branchName(x.b))}</b></td><td class="num">${x.act}</td><td class="num">${x.on}</td><td class="num">${Math.round(x.hrs)}</td><td class="num">${rs(x.cost)}</td><td><div class="bar"><i style="width:${(x.cost / maxC * 100).toFixed(1)}%"></i></div></td></tr>`).join('')}</tbody></table></div></div>
-    <div class="card"><h2>On shift now</h2>${onShift.length ? `<table><tbody>${onShift.sort((a, b) => a.punch.epoch - b.punch.epoch).map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td>${esc(branchName(i.punch.store))}</td><td class="num">since ${i.punch.time.slice(11, 16)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Nobody is punched in right now.</p>'}
-      <h2 style="margin-top:18px">Salary rules</h2>
-      <ol class="muted" style="padding-left:18px;line-height:1.6;margin:0">
-        <li>A shift under ${D.config.halfDayHrs} h counts as ½ day.</li>
-        <li>FIXED: planned × min(days, working days) ÷ working days (working days = days in month − ${D.config.weekOffsPerMonth}).</li>
-        <li>HOURLY: (hours + paid week-off hours) × planned ÷ (days in month × duty hrs).</li>
-        <li>Week-off days: <b>auto = 1 per 6 days worked, max ${D.config.weekOffsPerMonth}</b> until set by hand in Payroll — provisional rule.</li>
-        <li>NET rounded to ₹10. Only APPROVED / ACCEPTED / MANUAL punches count.</li></ol></div>
+    <div class="card"><h2>Stores today</h2><div class="scroll"><table><thead><tr><th>Store</th><th class="num">On shift now</th><th class="num">Worked today</th><th class="num">Staff</th><th>Status</th></tr></thead><tbody>
+      ${byB.map(x => `<tr class="click" onclick="ST.branch='${x.b}';go('daily')"><td><b>${esc(branchName(x.b))}</b></td><td class="num"><b>${x.on}</b></td><td class="num">${x.done}</td><td class="num">${x.act}</td>
+        <td>${x.miss ? `<span class="tag t-bad">${x.miss} missing OUT</span>` : x.on ? '<span class="tag t-ok">● open</span>' : '<span class="tag t-mute">nobody in</span>'}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card"><h2>On shift now</h2>${onShift.length ? `<table><tbody>${onShift.sort((a, b) => a.punch.epoch - b.punch.epoch).map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td>${esc(branchName(i.punch.store))}</td><td class="num">since ${i.punch.time.slice(11, 16)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Nobody is punched in right now.</p>'}</div>
   </div>`;
 }
 
