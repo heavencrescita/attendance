@@ -172,6 +172,17 @@ function calcPay(e, shifts, ctx) {
     ded, add, dedT, addT, gross, net, payable: Math.max(0, net), carry: Math.max(0, -net) };
 }
 function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
+// Some staff cover a shortage at another outlet mid-month, or have simply moved outlets while the
+// roster still lists their old one. Base+OT pay should land on whichever branch they actually clocked
+// hours at, not on a home branch that may be stale — split across branches when they worked more than
+// one. Returns null only when there's no attendance this month at all (then the roster's home branch is
+// the only information there is); otherwise always reflects the attendance, even for a single branch.
+function branchSplit(shifts) {
+  const by = {}; let tot = 0;
+  (shifts || []).filter(s => s.hours > 0 && s.store).forEach(s => { by[s.store] = (by[s.store] || 0) + s.hours; tot += s.hours; });
+  if (!tot) return null;
+  return Object.keys(by).map(b => ({ branch: b, hrs: by[b], frac: by[b] / tot })).sort((a, b) => b.frac - a.frac);
+}
 
 
 const $ = s => document.querySelector(s);
@@ -248,7 +259,7 @@ function derive() {
   const asOf = e => { const v = D.v9[e.id]; if (!v || v.plan === '' || v.plan == null) return e;
     return Object.assign({}, e, { name: v.name || e.name, branch: v.branch || e.branch, payType: v.payType || e.payType, plan: Number(v.plan), duty: Number(v.duty) || e.duty,
       status: v.status || e.status, woEligible: v.woEligible || e.woEligible, woDays: v.woDays === '' ? e.woDays : v.woDays, dailyRate: Number(v.dailyRate) || 0 }); };
-  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }) }));
+  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }), branchSplit: branchSplit(D.byEmp[e.id].inMonth) }));
   D.hasV9 = (D.v9Ref || []).length > 0;
   D.unmatched = (D.importedShifts || []).filter(r => !r.empId);
   D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
@@ -387,7 +398,7 @@ function monthRows() {
     if (D.hasV9 && !v) return null;
     const r = v ? { net: +v.net, base: +v.base, ot: +v.ot, ded: +v.ded, add: +v.add, hrs: x.r.workH, days: +v.days } : { net: x.r.net, base: x.r.base, ot: x.r.otPay, ded: x.r.dedT, add: x.r.addT, hrs: x.r.workH, days: x.r.days };
     if (!v && !r.net && !r.hrs) return null;
-    return Object.assign(r, { e: x.e, branch: (v && v.branch) || x.e.branch, otH: x.r.otH });
+    return Object.assign(r, { e: x.e, branch: (v && v.branch) || x.e.branch, otH: x.r.otH, branchSplit: x.branchSplit });
   }).filter(Boolean);
 }
 const sumBy = (rows, k) => rows.reduce((s, x) => s + (Number(x[k]) || 0), 0);
@@ -469,8 +480,18 @@ function monthView() {
   const HT = historyTotals(), hm = Object.keys(HT).sort(), prevM = hm.filter(m => m < D.month).pop(), P = prevM ? HT[prevM] : null;
   const src = D.hasV9 ? `<span class="tag t-ok">Figures from the V9 workbook</span>` : `<span class="tag t-mute">Live from punches${D.month === nowMonth() ? ' · month in progress' : ''}</span>`;
   if (!rows.length) { $('#ovb').innerHTML = `<div class="card"><h2>${esc(D.monthLabel)}</h2><p class="muted">No attendance or payroll for this month yet. Pick a month above${hm.length ? ` — the latest with data is <a href="#" onclick="pickMonth('${hm[hm.length - 1]}');return false">${MON(hm[hm.length - 1])}</a>` : ''}.</p></div>`; return; }
-  // branches
-  const bm = {}; rows.forEach(x => { const b = bm[x.branch] = bm[x.branch] || { b: x.branch, net: 0, base: 0, ot: 0, ded: 0, hrs: 0, n: 0 }; b.net += x.net; b.base += x.base; b.ot += x.ot; b.ded += x.ded; b.hrs += x.hrs; if (x.net > 0) b.n++; });
+  // branches — staff who covered a shortage at another outlet have their pay split by hours actually worked there,
+  // not dumped on their home branch (branchSplit is null for everyone who worked one branch all month)
+  const bm = {}, splitPeople = []; rows.forEach(x => {
+    const alloc = x.branchSplit || [{ branch: x.branch, frac: 1 }];
+    if (x.branchSplit && x.branchSplit.length > 1) splitPeople.push(x);
+    alloc.forEach(a => {
+      const b = bm[a.branch] = bm[a.branch] || { b: a.branch, net: 0, base: 0, ot: 0, ded: 0, hrs: 0, people: new Set() };
+      b.net += x.net * a.frac; b.base += x.base * a.frac; b.ot += x.ot * a.frac; b.ded += x.ded * a.frac; b.hrs += x.hrs * a.frac;
+      if (x.net > 0) b.people.add(x.e.id);
+    });
+  });
+  Object.values(bm).forEach(b => b.n = b.people.size);
   const brs = Object.values(bm).filter(b => b.net || b.hrs).sort((a, b) => b.net - a.net), maxB = Math.max(1, ...brs.map(b => b.base + b.ot));
   const avgHr = T.perHr;
   const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
@@ -515,7 +536,7 @@ function monthView() {
         <td><div class="sbar"><i style="width:${(b.base / maxB * 100).toFixed(1)}%;background:var(--c1)"></i>${b.ot ? `<i style="width:${(b.ot / maxB * 100).toFixed(1)}%;background:var(--c2)"></i>` : ''}</div></td>
         <td class="num"><b>${rs(b.net)}</b></td><td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`).join('')}
       </tbody></table></div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime.</p></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime.${splitPeople.length ? ` <a href="#" onclick="showBranchSplits();return false">${splitPeople.length} covered a shortage elsewhere — pay split by hours worked →</a>` : ''}</p></div>
     <div class="grid" style="align-content:start">
       <div class="card"><h2>Pay by month</h2>${trend.length > 1 ? colChart(trend, lakh) : `<p class="muted">Only one month of data so far.</p>${colChart(trend, lakh)}`}</div>
       <div class="card"><h2>Hours worked by month</h2>${colChart(trendH, v => Math.round(v).toLocaleString('en-IN'))}</div>
@@ -540,6 +561,15 @@ function monthView() {
   </div>
   ${topOT.length ? `<div class="card" style="margin-top:14px"><h2>Highest overtime pay</h2><div class="scroll"><table><thead><tr><th>Employee</th><th>Branch</th><th class="num">Hours</th><th class="num">OT pay</th><th class="num">NET</th></tr></thead><tbody>
     ${topOT.map(x => `<tr><td><b>${esc(x.e.name)}</b> <span class="muted">${x.e.id}</span></td><td>${esc(branchName(x.branch))}</td><td class="num">${Math.round(x.hrs)}</td><td class="num"><b>${rs(x.ot)}</b></td><td class="num">${rs(x.net)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+}
+function showBranchSplits() {
+  const D = ST.D, rows = monthRows().filter(x => x.branchSplit && x.branchSplit.length > 1);
+  openDrawer(`<div class="row"><h2 style="margin:0">Pay split across branches · ${esc(D.monthLabel)}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+  <p class="muted" style="margin-top:8px">These people clocked hours at more than one branch this month. Their base pay and OT are divided between those branches by the share of hours actually worked at each — not credited whole to their home branch.</p>
+  <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Employee</th><th>Home branch</th><th>Worked at</th><th class="num">Hours</th><th class="num">Share</th><th class="num">Base+OT</th></tr></thead><tbody>
+  ${rows.map(x => x.branchSplit.map((a, i) => `<tr>${i === 0 ? `<td rowspan="${x.branchSplit.length}"><b>${esc(x.e.name)}</b><div class="muted">${x.e.id}</div></td><td rowspan="${x.branchSplit.length}">${esc(branchName(x.branch))}</td>` : ''}
+    <td>${esc(branchName(a.branch))}</td><td class="num">${a.hrs.toFixed(1)}</td><td class="num">${(a.frac * 100).toFixed(0)}%</td><td class="num">${rs((x.base + x.ot) * a.frac)}</td></tr>`).join('')).join('')}
+  </tbody></table></div>`);
 }
 function todayView() {
   const D = ST.D, act = D.employees.filter(e => e.status === 'Active');
@@ -771,7 +801,7 @@ function pay() {
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
       <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button></div>
     <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">OT</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th>${D.hasV9 ? '<th class="num">V9 NET</th>' : ''}<th>Notes</th></tr></thead><tbody>
-    ${R.map(({ e, r }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}</td><td>${e.payType}</td>
+    ${R.map(({ e, r, branchSplit: bs }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${bs && bs.length > 1 ? ` <span class="tag t-mute" title="${bs.map(a => branchName(a.branch) + ' ' + (a.frac * 100).toFixed(0) + '%').join(' · ')}">split</span>` : (bs && bs[0].branch !== e.branch ? ` <span class="tag t-warn" title="Roster says ${esc(branchName(e.branch))}; attendance this month is all at ${esc(branchName(bs[0].branch))}">moved?</span>` : '')}</td><td>${e.payType}</td>
       <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
       <td class="num">${r.eligible ? `<input class="mini" type="number" min="0" max="8" value="${r.creditDays}" onchange="setWO('${e.id}',this.value)" title="${r.creditSource}"> ${r.creditSource === 'rule' ? '' : '<span class="tag t-mute">manual</span>'}` : '<span class="muted">—</span>'}</td>
       <td class="num">${rs(r.base)}</td><td class="num">${r.otPay ? rs(r.otPay) : '<span class="muted">—</span>'}</td><td class="num">${r.dedT ? rs(r.dedT) : '<span class="muted">—</span>'}</td><td class="num">${r.addT ? rs(r.addT) : '<span class="muted">—</span>'}</td>
@@ -788,8 +818,9 @@ function x9(id, net) {
 }
 function setWO(id, v) { act({ action: 'setWeekOff', empId: id, month: ST.D.month, days: Number(v) }, 'Week-off days saved'); }
 function showCalc(id) {
-  const D = ST.D, x = D.pay.find(p => p.e.id === id), e = x.e, r = x.r, sh = D.byEmp[id].inMonth;
+  const D = ST.D, x = D.pay.find(p => p.e.id === id), e = x.e, r = x.r, sh = D.byEmp[id].inMonth, bs = x.branchSplit;
   openDrawer(`<div class="row"><div><h2 style="margin:0">${esc(e.name)}</h2><div class="muted">${e.id} · ${esc(branchName(e.branch))} · ${e.payType} · ${e.status}</div></div><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    ${bs && bs.length > 1 ? `<div class="note" style="margin-top:10px">Worked multiple branches this month — base pay + OT (₹${rs(r.base + r.otPay)}) is split by hours: ${bs.map(a => `<b>${esc(branchName(a.branch))}</b> ${(a.frac * 100).toFixed(0)}% (₹${rs((r.base + r.otPay) * a.frac)})`).join(' · ')}</div>` : (bs && bs[0].branch !== e.branch ? `<div class="note" style="margin-top:10px">Roster lists <b>${esc(branchName(e.branch))}</b> but every clocked hour this month was at <b>${esc(branchName(bs[0].branch))}</b> — that's where this pay is attributed in Branch Summary.</div>` : '')}
     <div class="steps">
       <div class="step"><div>Shifts worked<div class="f">${sh.length} shifts, ${r.halfDays} of ${D.config.halfDayHrs} h or less counted as ½ day${sh.some(s => s.imported) ? ' · from V9 attendance' : ''}</div></div><b>${r.days} days</b></div>
       <div class="step"><div>Hours on shift</div><b>${r.workH.toFixed(2)} h</b></div>
@@ -816,8 +847,9 @@ function exportAttendance() {
   csv(rows, `BWC_Attendance_${D.month}.csv`);
 }
 function exportPayroll() {
-  const D = ST.D, rows = [['WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan', 'Duty Hrs', 'Days Worked', 'Clocked Hrs', 'Week-off Days', 'Base Salary', 'OT Hrs', 'OT Pay', 'Total Ded', 'Total Add', 'NET', 'NET Payable', 'Carry Fwd', 'V9 NET']];
-  D.pay.forEach(({ e, r }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, r.workH.toFixed(2), r.creditDays, r.base.toFixed(2), r.otH.toFixed(2), r.otPay.toFixed(2), r.dedT, r.addT, r.net, r.payable, r.carry, D.v9[e.id] ? D.v9[e.id].net : '']));
+  const D = ST.D, rows = [['WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan', 'Duty Hrs', 'Days Worked', 'Clocked Hrs', 'Week-off Days', 'Base Salary', 'OT Hrs', 'OT Pay', 'Total Ded', 'Total Add', 'NET', 'NET Payable', 'Carry Fwd', 'V9 NET', 'Branches worked (share of base+OT)']];
+  D.pay.forEach(({ e, r, branchSplit: bs }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, r.workH.toFixed(2), r.creditDays, r.base.toFixed(2), r.otH.toFixed(2), r.otPay.toFixed(2), r.dedT, r.addT, r.net, r.payable, r.carry, D.v9[e.id] ? D.v9[e.id].net : '',
+    bs ? bs.map(a => `${branchName(a.branch)} ${(a.frac * 100).toFixed(0)}%`).join(' / ') : '']));
   csv(rows, `BWC_Payroll_${D.month}.csv`);
 }
 
