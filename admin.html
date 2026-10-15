@@ -735,12 +735,29 @@ function addReg() {
 function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ action: 'delReg', kind, rowId }, 'Removed'); }
 
 /* ---------------- PAYROLL ---------------- */
+// Payslips reach staff in My BWC only after a month is released here
+function releaseCard() {
+  const D = ST.D; if (D.role !== 'admin') return '';
+  const rel = (D.releases || []).find(r => r.month === D.month), closed = D.month < D.now.slice(0, 7);
+  if (rel) return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--ok)"><div class="row"><div><b>Payslips released to staff</b><div class="muted">${esc(D.monthLabel)} · released by ${esc(rel.releasedBy)} on ${String(rel.releasedAt).slice(0, 16).replace('T', ' ')}. Staff see these figures in My BWC.</div></div><div class="sp"></div><button class="btn" onclick="withdrawRelease()">Withdraw</button></div></div>`;
+  return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="row"><div><b>Not released to staff</b><div class="muted">${closed ? `Staff see their ${esc(D.monthLabel)} attendance but no pay. Release once the payout is done — ${D.hasV9 ? 'the imported payroll figures' : 'the figures on this page'} become their payslips.` : `${esc(D.monthLabel)} is still running. Pay can be released after the month closes.`}</div></div><div class="sp"></div>${closed ? `<button class="btn g" onclick="releasePay()">Release payslips</button>` : ''}</div></div>`;
+}
+async function releasePay() {
+  const D = ST.D;
+  const rows = D.hasV9 ? [] : D.pay.filter(x => x.e.status === 'Active' || x.r.days > 0).map(({ e, r }) => ({ empId: e.id, name: e.name, branch: e.branch, payType: e.payType, plan: e.plan, duty: e.duty, status: e.status,
+    woEligible: e.woEligible, woDays: e.woDays, dailyRate: e.dailyRate, net: r.payable, base: Math.round(r.base * 100) / 100, ot: Math.round(r.otPay * 100) / 100, ded: r.dedT, add: r.addT, days: r.days, hrs: Math.round(r.workH * 100) / 100 }));
+  if (!D.hasV9 && (D.flagged.length || D.issues.some(i => i.kind === 'Missing OUT')) && !confirm('There are flagged punches or missing OUTs that are not in these figures. Release anyway?')) return;
+  if (!confirm(`Release ${D.monthLabel} payslips to all staff? They will see these figures in My BWC.`)) return;
+  await act({ action: 'releaseMonth', month: D.month, rows }, 'Released to staff');
+}
+async function withdrawRelease() { if (confirm(`Hide ${ST.D.monthLabel} payslips from staff again?`)) await act({ action: 'releaseMonth', month: ST.D.month, release: false }, 'Withdrawn'); }
 function pay() {
   const D = ST.D, b = ST.branch;
   const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0 || (D.v9[x.e.id] && Number(D.v9[x.e.id].net))));
   const sum = k => R.reduce((s, x) => s + x.r[k], 0);
   const missing = D.issues.filter(i => i.kind === 'Missing OUT').length;
   $('#main').innerHTML = `
+  ${releaseCard()}
   ${missing || D.flagged.length ? `<div class="note">${D.flagged.length} flagged punch(es) and ${missing} missing OUT(s) are <b>not</b> in these numbers yet. <a href="#" onclick="go('flags');return false">Review →</a></div>` : ''}
   <div class="grid kpis">
     <div class="card kpi accent"><div class="l">NET payable · ${b === 'ALL' ? 'all branches' : esc(branchName(b))}</div><div class="v">${rs(sum('net'))}</div><div class="s">${esc(D.monthLabel)}</div></div>

@@ -66,6 +66,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .takehome{margin-top:16px}
 .takehome .lbl{font-size:13.5px;color:#d8c9bd}
 .takehome .amt{font-family:var(--serif);font-variation-settings:"SOFT" 100,"opsz" 144;font-weight:500;font-size:52px;line-height:1.05;letter-spacing:-.01em;margin:4px 0 6px}
+.takehome .amt.pending{font-size:34px;line-height:1.15;margin:6px 0 8px;color:#f3e6d8}
 .takehome .amt small{font-size:26px;vertical-align:.45em;margin-right:4px;color:#f0c46e}
 .badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:4px 10px;border-radius:999px}
 .badge.final{background:rgba(98,201,139,.16);color:#9fe2b8}
@@ -193,7 +194,7 @@ nav.tabs .dotn{position:absolute;margin-left:18px;margin-top:-2px;min-width:16px
       <a class="btn btn-syrup" href="index.html" style="padding:9px 14px;font-size:14px;text-decoration:none">Punch</a></div>
     <div class="mswitch"><button id="m-prev" aria-label="Previous month" onclick="stepMonth(-1)">‹</button><div class="m" id="m-lbl"></div><button id="m-next" aria-label="Next month" onclick="stepMonth(1)">›</button></div>
     <div class="takehome"><div class="lbl" id="th-lbl">Take-home pay</div><div class="amt num" id="th-amt"></div><span class="badge" id="th-badge"></span></div>
-    <div class="stats"><div><b class="num" id="st-days"></b><span>days worked</span></div><div><b class="num" id="st-hrs"></b><span>hours</span></div><div><b class="num" id="st-ot"></b><span>overtime pay</span></div></div>
+    <div class="stats"><div><b class="num" id="st-days"></b><span>days worked</span></div><div><b class="num" id="st-hrs"></b><span>hours</span></div><div><b class="num" id="st-ot"></b><span id="sl-ot">overtime pay</span></div></div>
   </div></header>
   <main id="main"></main>
   <nav class="tabs" aria-label="Sections"><div class="in" id="tabs"></div></nav>
@@ -288,6 +289,7 @@ const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const rs = n => (n < 0 ? '−₹' : '₹') + Math.abs(Math.round(n)).toLocaleString('en-IN');
+const dShort = iso => { const d = String(iso).slice(0, 10).split('-'); return d.length === 3 ? Number(d[2]) + ' ' + MN[Number(d[1]) - 1].slice(0, 3) + ' ' + d[0] : ''; };
 const MN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const monLbl = m => MN[Number(m.slice(5)) - 1] + ' ' + m.slice(0, 4);
@@ -327,10 +329,13 @@ function derive() {
   D.emp = emp;
   D.shifts = shifts;
   D.calc = calcPay(emp, shifts, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff });
+  // Pay is shown only for months the office has released; the server sends no pay data otherwise
   const v = D.v9;
-  D.final = !!v;
-  D.pay = v ? { net: +v.net, base: +v.base, ot: +v.ot, ded: +v.ded, add: +v.add, days: +v.days } : { net: D.calc.net, base: D.calc.base, ot: D.calc.otPay, ded: D.calc.dedT, add: D.calc.addT, days: D.calc.days };
+  D.final = !!(D.released && v);
+  D.pay = D.final ? { net: +v.net, base: +v.base, ot: +v.ot, ded: +v.ded, add: +v.add, days: +v.days } : null;
   D.hours = shifts.reduce((s, x) => s + (x.hours > 0 ? x.hours : 0), 0);
+  D.daysWorked = new Set(shifts.filter(x => x.hours > 0).map(x => x.date)).size;
+  D.lastPaid = (D.history || []).slice().sort((a, b) => a.month.localeCompare(b.month)).pop() || null;
 }
 function stepMonth(d) { const ms = U.D.months, i = ms.indexOf(U.D.month) + d; if (ms[i]) { U.sel = null; load(ms[i]).catch(e => alert(e.message)); } }
 
@@ -339,14 +344,20 @@ function render() {
   $('h-name').textContent = e.name; $('h-sub').textContent = e.id + ' · ' + e.branchName;
   $('m-lbl').textContent = monLbl(D.month);
   const i = D.months.indexOf(D.month); $('m-prev').disabled = i <= 0; $('m-next').disabled = i >= D.months.length - 1;
-  $('th-amt').innerHTML = '<small>₹</small>' + Math.max(0, Math.round(P.net)).toLocaleString('en-IN');
-  const live = D.month === todayIST().slice(0, 7);
-  $('th-lbl').textContent = D.final ? 'Take-home pay' : live ? 'Earned so far this month' : 'Estimated take-home pay';
-  $('th-badge').className = 'badge ' + (D.final ? 'final' : 'est');
-  $('th-badge').textContent = D.final ? '● Final, as paid' : '● Estimate, may change';
-  $('st-days').textContent = (+P.days).toLocaleString('en-IN', { maximumFractionDigits: 1 });
+  const live = D.month >= todayIST().slice(0, 7);
+  if (D.final) {
+    $('th-lbl').textContent = 'Take-home pay';
+    $('th-amt').className = 'amt num'; $('th-amt').innerHTML = '<small>₹</small>' + Math.max(0, Math.round(P.net)).toLocaleString('en-IN');
+    $('th-badge').className = 'badge final'; $('th-badge').textContent = '● Paid' + (D.releasedAt ? ' · released ' + dShort(D.releasedAt) : '');
+  } else {
+    $('th-lbl').textContent = 'Pay for ' + monLbl(D.month);
+    $('th-amt').className = 'amt pending'; $('th-amt').textContent = live ? 'After month end' : 'Not released yet';
+    $('th-badge').className = 'badge est'; $('th-badge').textContent = live ? '● Your attendance below is live' : '● Shows here once the office releases it';
+  }
+  $('st-days').textContent = (D.final ? +P.days : D.daysWorked).toLocaleString('en-IN', { maximumFractionDigits: 1 });
   $('st-hrs').textContent = Math.round(D.hours).toLocaleString('en-IN');
-  $('st-ot').textContent = rs(P.ot);
+  if (D.final) { $('st-ot').textContent = rs(P.ot); $('sl-ot').textContent = 'overtime pay'; }
+  else { const L = D.lastPaid; $('st-ot').textContent = L ? rs(L.net) : '—'; $('sl-ot').textContent = L ? 'paid for ' + MN[Number(L.month.slice(5)) - 1].slice(0, 3) : 'no payslips yet'; }
   const pend = U.shifts.filter(s => s.status === 'PENDING' && s.canAnswer).length;
   const tabs = [['home', 'Overview', 'M3 10.5 12 3l9 7.5V21H3z'], ['att', 'Attendance', 'M4 4h16v16H4zM4 9h16M9 4v16M14 4v16'], ['pay', 'Pay', 'M3 6h18v12H3zM3 10h18M7 15h4'],
     ['shifts', 'Shifts', 'M12 7v5l3 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z', pend], ['me', 'My details', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6']];
@@ -390,12 +401,12 @@ function home() {
   $('main').innerHTML = `
   ${pend ? `<div class="panel" style="border-color:var(--syrup)"><div class="row"><div><b>${pend} planned shift${pend > 1 ? 's need' : ' needs'} your answer</b><div class="ta">ஷிஃப்டுகளுக்கு பதில் தேவை</div></div><div class="sp"></div><button class="btn btn-syrup" onclick="go('shifts')">Answer</button></div></div>` : ''}
   <div class="panel"><h2>${monLbl(D.month)} at a glance</h2><p class="lead">Tap a day to see your punches.</p>${waffle()}${dayBox()}</div>
-  <div class="panel"><div class="row"><div><h2 style="margin:0">Your pay this month</h2><div class="muted" style="font-size:14px">${D.final ? 'Final figures from the payroll' : 'Worked out from your punches so far'}</div></div></div>
+  ${D.final ? `<div class="panel"><div class="row"><div><h2 style="margin:0">Your pay for ${monLbl(D.month)}</h2><div class="muted" style="font-size:14px">Final figures, as paid</div></div></div>
     <div class="ln"><div class="k">Earned for hours and days</div><div class="v">${rs(D.pay.base)}</div></div>
     ${D.pay.ot ? `<div class="ln"><div class="k">Overtime</div><div class="v">${rs(D.pay.ot)}</div></div>` : ''}
     ${D.pay.add ? `<div class="ln"><div class="k">Bonus and other additions</div><div class="v">${rs(D.pay.add)}</div></div>` : ''}
     <div class="ln minus"><div class="k">Deductions</div><div class="v">${D.pay.ded ? '−' + rs(D.pay.ded) : '₹0'}</div></div>
-    <button class="btn btn-ghost wide" style="margin-top:14px" onclick="go('pay')">See full payslip</button></div>
+    <button class="btn btn-ghost wide" style="margin-top:14px" onclick="go('pay')">See full payslip</button></div>` : notReleased()}
   ${up ? `<div class="panel"><h2>Next planned shift</h2><div class="row" style="margin-top:6px"><div><b style="font-size:17px">${dayLbl(up.date)}, ${up.start}–${up.end}</b><div class="muted">${esc(up.store)}</div></div><div class="sp"></div>${stTag(up.status)}</div></div>` : ''}
   ${pendReq ? `<div class="panel"><b>${pendReq} request${pendReq > 1 ? 's are' : ' is'} waiting for your manager.</b> <button class="btn btn-quiet" onclick="go('me')">View</button></div>` : ''}`;
 }
@@ -406,11 +417,24 @@ function att() {
   <div class="panel"><h2>Every shift</h2>
     ${days.map(d => { const inf = dayInfo(d); return `<div class="shift" style="flex-wrap:wrap"><div style="min-width:120px"><b>${dayLbl(d)}</b></div><div class="num">${inf.sh.map(s => s.in + '–' + s.out).join(', ')}</div><div class="sp"></div><b class="num">${inf.h.toFixed(1)} h</b></div>`; }).join('') || '<p class="muted">No shifts recorded this month yet.</p>'}</div>`;
 }
+function notReleased() {
+  const D = U.D, live = D.month >= todayIST().slice(0, 7), L = D.lastPaid;
+  return `<div class="panel"><h2>Your pay for ${monLbl(D.month)}</h2>
+    <p class="lead">${live ? `Pay is worked out after the month ends and released by the office once it is paid. Until then, check your days and hours here — if a punch is wrong or missing, report it now while it is easy to fix.` : `The office has not released ${monLbl(D.month)} pay yet. Your payslip will appear here as soon as it is.`}</p>
+    <div class="ta">சம்பளம் வெளியிட்ட பிறகு இங்கே தெரியும்</div>
+    ${L && L.month !== D.month ? `<button class="btn btn-ghost wide" style="margin-top:14px" onclick="openSlip('${L.month}')">Open your ${monLbl(L.month)} payslip</button>` : ''}</div>`;
+}
+async function openSlip(m) { U.tab = 'pay'; U.sel = null; try { await load(m); } catch (e) { alert(e.message); } }
+function payHistory() {
+  const D = U.D, H = (D.history || []).slice().sort((a, b) => a.month.localeCompare(b.month));
+  if (!H.length) return '';
+  const mx = Math.max(1, ...H.map(h => +h.net));
+  return `<div class="panel" style="margin-top:14px"><h2>Take-home by month</h2><p class="lead">Tap a month to open its payslip.</p>
+    <div class="bars">${H.map(h => `<button class="bar ${h.month === D.month ? 'on' : ''}" onclick="openSlip('${h.month}')" aria-label="${monLbl(h.month)}: ${rs(h.net)}"><b>${rs(h.net)}</b><i style="height:${Math.max(4, h.net / mx * 110)}px"></i><span>${MN[Number(h.month.slice(5)) - 1].slice(0, 3)}</span></button>`).join('')}</div></div>`;
+}
 function pay() {
   const D = U.D, e = D.emp, c = D.calc, P = D.pay;
-  const H = (D.history || []).slice().sort((a, b) => a.month.localeCompare(b.month));
-  if (!H.some(h => h.month === D.month)) H.push({ month: D.month, net: P.net, live: true }); H.sort((a, b) => a.month.localeCompare(b.month));
-  const mx = Math.max(1, ...H.map(h => +h.net));
+  if (!D.final) { $('main').innerHTML = notReleased() + payHistory(); return; }
   const rate = e.payType === 'FIXED' ? `Fixed salary of ${rs(e.plan)} a month, paid for days worked out of ${c.workDays} working days.`
     : `Hourly pay at ${rs(c.rate)} an hour (₹${Number(e.plan).toLocaleString('en-IN')} a month ÷ ${c.calDays} days ÷ ${e.duty} hours). ${c.creditDays ? `Includes ${c.creditDays} paid week-off day${c.creditDays > 1 ? 's' : ''}.` : ''}`;
   $('main').innerHTML = `
@@ -423,11 +447,10 @@ function pay() {
     <div class="sec">Deductions</div>
     ${(D.deductions || []).map(d => `<div class="ln minus"><div class="k">${esc(cat(d.category))}<small>${esc(d.note)}</small></div><div class="v">−${rs(d.amount)}</div></div>`).join('') || '<div class="ln"><div class="k muted">No deductions this month</div><div class="v">₹0</div></div>'}
     <div class="net"><b>Take-home pay</b><span class="num">${rs(Math.max(0, P.net))}</span></div>
-    <p class="how">${D.final ? 'These are the final figures from the payroll for this month.' : 'This is an estimate from your punches so far. The final amount is fixed when payroll is closed.'} ${rate}</p>
+    <p class="how">These are the final figures for this month${D.releasedAt ? ', released on ' + dShort(D.releasedAt) : ''}. ${rate}</p>
     <button class="btn btn-ghost noprint" onclick="window.print()">Print or save as PDF</button>
    </div></div>
-  <div class="panel" style="margin-top:14px"><h2>Take-home by month</h2><p class="lead">Tap a month to open it.</p>
-    <div class="bars">${H.map(h => `<button class="bar ${h.month === D.month ? 'on' : ''}" onclick="load('${h.month}')" aria-label="${monLbl(h.month)}: ${rs(h.net)}"><b>${rs(h.net)}</b><i style="height:${Math.max(4, h.net / mx * 110)}px;${h.live ? 'opacity:.6' : ''}"></i><span>${MN[Number(h.month.slice(5)) - 1].slice(0, 3)}</span></button>`).join('')}</div></div>`;
+  ${payHistory()}`;
 }
 const cat = c => ({ 'UNI/HYG/TRNG': 'Uniform, hygiene or training', 'TSHIRT/EQUIP': 'T-shirt or equipment', 'T-SHIRT/EQUIP': 'T-shirt or equipment', 'CASH SHORT': 'Cash shortage', COMPLAINT: 'Customer complaint', DISCIPLINE: 'Discipline', ADVANCE: 'Salary advance' }[c] || c);
 const stTag = s => s === 'ACCEPTED' ? '<span class="tag t-ok">Accepted</span>' : s === 'REJECTED' ? '<span class="tag t-bad">Rejected</span>' : '<span class="tag t-warn">Answer needed</span>';
