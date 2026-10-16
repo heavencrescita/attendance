@@ -215,6 +215,13 @@ const LONG_SHIFT_H = 20;
 
 function istParts(iso) { return { date: iso.slice(0, 10), time: iso.slice(11, 16) }; }
 
+// The 6:00am shift gets a 10-minute grace at clock-in: punching in anywhere from 06:00 to 06:10 still pays as if
+// they clocked in at 06:00 exactly. hm is the punch's local "HH:MM"; returns the epoch to use for hours worked.
+function graceAdjustEpoch_(epoch, hm) {
+  const m = /^06:(0[0-9]|10)$/.exec(hm || '');
+  return m ? epoch - Number(m[1]) * 60000 : epoch;
+}
+
 // Pair punches into shifts for one employee. Returns {shifts, issues}.
 function buildShifts(punches, now) {
   now = now || Date.now();
@@ -228,7 +235,7 @@ function buildShifts(punches, now) {
       if (open && Number(p.epoch) - Number(open.epoch) <= MAX_SHIFT_MS) {
         const i = istParts(open.time), o = istParts(p.time);
         shifts.push({ date: i.date, day: Number(i.date.slice(8, 10)), in: i.time, out: o.time + (o.date !== i.date ? ' +1' : ''),
-          hours: (Number(p.epoch) - Number(open.epoch)) / 3600000, store: open.store, inPunch: open, outPunch: p });
+          hours: (Number(p.epoch) - graceAdjustEpoch_(Number(open.epoch), i.time)) / 3600000, store: open.store, inPunch: open, outPunch: p });
         if ((Number(p.epoch) - Number(open.epoch)) / 3600000 > LONG_SHIFT_H) issues.push({ kind: 'Very long shift — check', punch: open, counted: true });
         open = null;
       } else issues.push({ kind: 'OUT without IN', punch: p });
@@ -283,6 +290,17 @@ function calcPay(e, shifts, ctx) {
     ded, add, dedT, addT, gross, net, payable: Math.max(0, net), carry: Math.max(0, -net) };
 }
 function inr(n) { return Math.round(n).toLocaleString('en-IN'); }
+// Some staff cover a shortage at another outlet mid-month, or have simply moved outlets while the
+// roster still lists their old one. Base+OT pay should land on whichever branch they actually clocked
+// hours at, not on a home branch that may be stale — split across branches when they worked more than
+// one. Returns null only when there's no attendance this month at all (then the roster's home branch is
+// the only information there is); otherwise always reflects the attendance, even for a single branch.
+function branchSplit(shifts) {
+  const by = {}; let tot = 0;
+  (shifts || []).filter(s => s.hours > 0 && s.store).forEach(s => { by[s.store] = (by[s.store] || 0) + s.hours; tot += s.hours; });
+  if (!tot) return null;
+  return Object.keys(by).map(b => ({ branch: b, hrs: by[b], frac: by[b] / tot })).sort((a, b) => b.frac - a.frac);
+}
 
 
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';

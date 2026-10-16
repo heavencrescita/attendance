@@ -104,6 +104,13 @@ const LONG_SHIFT_H = 20;
 
 function istParts(iso) { return { date: iso.slice(0, 10), time: iso.slice(11, 16) }; }
 
+// The 6:00am shift gets a 10-minute grace at clock-in: punching in anywhere from 06:00 to 06:10 still pays as if
+// they clocked in at 06:00 exactly. hm is the punch's local "HH:MM"; returns the epoch to use for hours worked.
+function graceAdjustEpoch_(epoch, hm) {
+  const m = /^06:(0[0-9]|10)$/.exec(hm || '');
+  return m ? epoch - Number(m[1]) * 60000 : epoch;
+}
+
 // Pair punches into shifts for one employee. Returns {shifts, issues}.
 function buildShifts(punches, now) {
   now = now || Date.now();
@@ -117,7 +124,7 @@ function buildShifts(punches, now) {
       if (open && Number(p.epoch) - Number(open.epoch) <= MAX_SHIFT_MS) {
         const i = istParts(open.time), o = istParts(p.time);
         shifts.push({ date: i.date, day: Number(i.date.slice(8, 10)), in: i.time, out: o.time + (o.date !== i.date ? ' +1' : ''),
-          hours: (Number(p.epoch) - Number(open.epoch)) / 3600000, store: open.store, inPunch: open, outPunch: p });
+          hours: (Number(p.epoch) - graceAdjustEpoch_(Number(open.epoch), i.time)) / 3600000, store: open.store, inPunch: open, outPunch: p });
         if ((Number(p.epoch) - Number(open.epoch)) / 3600000 > LONG_SHIFT_H) issues.push({ kind: 'Very long shift — check', punch: open, counted: true });
         open = null;
       } else issues.push({ kind: 'OUT without IN', punch: p });
@@ -297,7 +304,7 @@ function derivePlan() {
 
 /* ---------------- SHELL ---------------- */
 function render() {
-  const D = ST.D, isAdmin = D.role === 'admin';
+  const D = ST.D, isAdmin = D.role === 'admin' || D.role === 'hr';
   const tabs = [['overview', 'Overview'], ['daily', 'Daily attendance'], ['flags', 'Review', D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length],
     ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll'], ['reqs', 'Staff requests', (D.requests || []).filter(r => r.status === 'PENDING').length]];
   if (isAdmin) tabs.push(['stores', 'Stores'], ['users', 'Users']);
@@ -444,7 +451,7 @@ function pickMonth(m) { ST.month = m; store('bwc_month', m); load(); }
 function actionItems() {
   const D = ST.D, a = [], act = D.employees.filter(e => e.status === 'Active');
   const noStore = D.stores.filter(s => s.active === 'Yes' && (s.lat === '' || s.lng === ''));
-  if (noStore.length) a.push({ t: `${noStore.length} store(s) have no location yet — every punch there is flagged until it's set`, d: noStore.map(s => s.name).join(', '), go: D.role === 'admin' ? 'stores' : '' });
+  if (noStore.length) a.push({ t: `${noStore.length} store(s) have no location yet — every punch there is flagged until it's set`, d: noStore.map(s => s.name).join(', '), go: (D.role === 'admin' || D.role === 'hr') ? 'stores' : '' });
   const noPin = act.filter(e => !e.hasPin); if (noPin.length) a.push({ t: `${noPin.length} active employee(s) have no PIN and can't punch`, d: noPin.map(e => e.name).join(', '), go: 'emps' });
   if (D.flagged.length) a.push({ t: `${D.flagged.length} flagged punch(es) to review`, go: 'flags' });
   const mo = D.issues.filter(i => i.kind === 'Missing OUT').length; if (mo) a.push({ t: `${mo} shift(s) missing a punch-out`, go: 'flags' });
@@ -683,16 +690,19 @@ function emps() {
   $('#main').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Employees (${list.length})</h2><div class="sp"></div>
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
-      ${D.role === 'admin' ? `<button class="btn t" onclick="bulkPins()">Issue PINs to everyone without one</button>` : ''}
-      <button class="btn y" onclick="editEmp(null)">+ Add employee</button></div>
+      ${D.role === 'hr' ? `<button class="btn t" onclick="bulkPins()">Issue PINs to everyone without one</button>` : ''}
+      ${D.role === 'hr' ? `<button class="btn y" onclick="editEmp(null)">+ Add employee</button>` : ''}</div>
+    ${D.role !== 'hr' ? `<p class="muted" style="margin:-4px 0 10px">Adding employees and issuing PINs is reserved for Sarah (HR admin).</p>` : ''}
     <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Pay type</th><th class="num">Planned</th><th class="num">Duty h</th><th>Week-off paid</th><th>PIN</th><th>Status</th><th></th></tr></thead><tbody>
     ${list.map(e => `<tr><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${e.roaming === 'Yes' ? ' <span class="tag t-mute">any store</span>' : ''}</td><td>${e.payType}</td><td class="num">${rs(e.plan)}</td><td class="num">${e.duty}</td><td>${e.woEligible}</td>
       <td>${e.hasPin ? '<span class="tag t-ok">Set</span>' : '<span class="tag t-bad">None</span>'}</td><td>${e.status === 'Active' ? '<span class="tag t-ok">Active</span>' : '<span class="tag t-mute">Inactive</span>'}</td>
-      <td><button class="btn" onclick="editEmp('${e.id}')">Edit</button> <button class="btn" onclick="resetPin('${e.id}')">${e.hasPin ? 'Reset PIN' : 'Issue PIN'}</button></td></tr>`).join('')}
+      <td><button class="btn" onclick="editEmp('${e.id}')">Edit</button> ${D.role === 'hr' ? `<button class="btn" onclick="resetPin('${e.id}')">${e.hasPin ? 'Reset PIN' : 'Issue PIN'}</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div></div>`;
 }
 function editEmp(id) {
-  const D = ST.D; const nextId = 'WAFF-' + String(Math.max(...D.employees.map(e => Number(e.id.slice(5)) || 0)) + 1).padStart(3, '0');
+  const D = ST.D;
+  if (!id && D.role !== 'hr') return toast('Only Sarah (HR admin) can add a new employee', true);
+  const nextId = 'WAFF-' + String(Math.max(...D.employees.map(e => Number(e.id.slice(5)) || 0)) + 1).padStart(3, '0');
   const e = id ? D.emp[id] : { id: nextId, name: '', branch: D.stores[0].code, payType: 'HOURLY', plan: 15000, duty: 9, status: 'Active', woEligible: 'Yes', roaming: 'No' };
   const codes = D.stores.map(s => s.code).concat(['MGR']);
   openDrawer(`<div class="row"><h2 style="margin:0">${id ? 'Edit ' + esc(e.name) : 'Add employee'}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
@@ -767,7 +777,7 @@ function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ ac
 /* ---------------- PAYROLL ---------------- */
 // Payslips reach staff in My BWC only after a month is released here
 function releaseCard() {
-  const D = ST.D; if (D.role !== 'admin') return '';
+  const D = ST.D; if (D.role !== 'admin' && D.role !== 'hr') return '';
   const rel = (D.releases || []).find(r => r.month === D.month), closed = D.month < D.now.slice(0, 7);
   if (rel) return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--ok)"><div class="row"><div><b>Payslips released to staff</b><div class="muted">${esc(D.monthLabel)} · released by ${esc(rel.releasedBy)} on ${String(rel.releasedAt).slice(0, 16).replace('T', ' ')}. Staff see these figures in My BWC.</div></div><div class="sp"></div><button class="btn" onclick="withdrawRelease()">Withdraw</button></div></div>`;
   return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="row"><div><b>Not released to staff</b><div class="muted">${closed ? `Staff see their ${esc(D.monthLabel)} attendance but no pay. Release once the payout is done — ${D.hasV9 ? 'the imported payroll figures' : 'the figures on this page'} become their payslips.` : `${esc(D.monthLabel)} is still running. Pay can be released after the month closes.`}</div></div><div class="sp"></div>${closed ? `<button class="btn g" onclick="releasePay()">Release payslips</button>` : ''}</div></div>`;
@@ -915,15 +925,16 @@ function reqs() {
   const pend = R.filter(r => r.status === 'PENDING'), done = R.filter(r => r.status !== 'PENDING');
   const body = r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {} const e = D.emp[r.empId] || {};
     if (r.kind === 'CORRECTION') return `<b>Missing or wrong punch</b> · ${esc(d.date)} · ${esc(d.inT)}–${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
+    if (r.kind === 'MISSED_PUNCHOUT') return `<b>Missed punch-out</b> · ${esc(d.date)} · clocked in ${esc(String(d.inTime).slice(11, 16))}, says they left ${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
     return `<b>Update details</b><table style="margin-top:6px"><tbody>${Object.keys(d).map(k => `<tr><td class="muted">${REQ_F[k] || k}</td><td>${esc(e[k] || '—')}</td><td>→</td><td><b>${esc(d[k])}</b></td></tr>`).join('')}</tbody></table>`; };
   $('#main').innerHTML = `<div class="card"><h2>Waiting for you · ${pend.length}</h2>
-    <p class="muted" style="margin-top:-6px">Staff send these from My BWC (heavencrescita.github.io/attendance/me.html). Approving a punch correction adds a manual IN and OUT; approving details updates the employee record.</p>
-    ${pend.map(r => `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span>${r.test ? ' <span class="tag t-mute">test account</span>' : ''}</div></div>
+    <p class="muted" style="margin-top:-6px">Staff send these from My BWC (heavencrescita.github.io/attendance/me.html). Approving a punch correction adds a manual IN and OUT; approving details updates the employee record. Missed punch-outs can only be approved by Sarah (HR admin).</p>
+    ${pend.map(r => { const locked = r.kind === 'MISSED_PUNCHOUT' && D.role !== 'hr'; return `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span>${r.test ? ' <span class="tag t-mute">test account</span>' : ''}${r.kind === 'MISSED_PUNCHOUT' ? ' <span class="tag t-warn">needs Sarah</span>' : ''}</div></div>
       <div style="margin:8px 0">${body(r)}</div>
-      <div class="row"><input type="text" id="rn-${r.requestId}" placeholder="Note to the employee (optional)" style="flex:1"><button class="btn g" onclick="decide('${r.requestId}','APPROVE')">Approve</button><button class="btn r" onclick="decide('${r.requestId}','REJECT')">Reject</button></div></div>`).join('') || '<p class="muted">Nothing to review.</p>'}</div>
+      ${locked ? `<p class="muted">Only Sarah (HR admin) can review this one.</p>` : `<div class="row"><input type="text" id="rn-${r.requestId}" placeholder="Note to the employee (optional)" style="flex:1"><button class="btn g" onclick="decide('${r.requestId}','APPROVE')">Approve</button><button class="btn r" onclick="decide('${r.requestId}','REJECT')">Reject</button></div>`}</div>`; }).join('') || '<p class="muted">Nothing to review.</p>'}</div>
   ${done.length ? `<div class="card" style="margin-top:14px"><h2>Recently decided</h2><div class="scroll"><table><thead><tr><th>When</th><th>Employee</th><th>Request</th><th>Decision</th><th>By</th></tr></thead><tbody>
     ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-  ${D.role === 'admin' ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
+  ${(D.role === 'admin' || D.role === 'hr') ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
     <p class="muted" style="margin-top:-6px">WAFF-901 “Test Employee” works in My BWC and on the punch screen like a real employee, but WAFF-900 to WAFF-999 never count in payroll, the dashboard, exports or the shift planner. Resetting wipes its punches, shifts and requests and loads fresh sample data for this month.</p>
     <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>` : ''}`;
 }
@@ -933,11 +944,11 @@ async function decide(id, decision) { await act({ action: 'reviewRequest', reque
 function users() {
   const D = ST.D;
   $('#main').innerHTML = `<div class="card"><h2>Dashboard users</h2>
-    <p class="muted"><b>admin</b>: everything. <b>staff</b> (backend team): employees, PINs, review, manual punches, deductions/additions, payroll — not stores or users.</p>
+    <p class="muted"><b>hr</b> (Sarah): everything admin can do, plus the only role that can add new employees, issue/reset PINs, or approve a missed punch-out. <b>admin</b>: everything except those three. <b>staff</b> (backend team): employees (edits), review, manual punches, deductions/additions, payroll — not stores, users, or the hr-only actions.</p>
     <table><thead><tr><th>User</th><th>Role</th><th>Active</th></tr></thead><tbody>${D.users.map(u => `<tr><td><b>${esc(u.user)}</b></td><td>${u.role}</td><td>${u.active}</td></tr>`).join('')}</tbody></table>
     <h2 style="margin-top:18px">Add or update a user</h2>
-    <div class="form"><label>User name<input type="text" id="u_user" placeholder="e.g. priya"></label>
-      <label>Role<select id="u_role"><option>staff</option><option>admin</option></select></label>
+    <div class="form"><label>User name<input type="text" id="u_user" placeholder="e.g. sarah"></label>
+      <label>Role<select id="u_role"><option>staff</option><option>admin</option><option>hr</option></select></label>
       <label>Active<select id="u_act"><option>Yes</option><option>No</option></select></label>
       <label>Password (8+ chars; blank = keep)<input type="password" id="u_pw" autocomplete="new-password"></label>
       <button class="btn y" onclick="saveUser()">Save user</button></div></div>`;

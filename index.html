@@ -82,6 +82,18 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line
     <p class="hello" id="hello"></p>
     <div class="state" id="state"></div>
     <div class="shnote hide" id="shnote" onclick="document.getElementById('shiftCard').scrollIntoView({behavior:'smooth'})"></div>
+    <div class="card hide" id="missedCard" style="border:2px solid var(--warn)">
+      <b id="missedMsg" style="color:var(--warn)"></b>
+      <div id="missedForm" class="hide">
+        <label for="m-out">What time did you actually leave? <span>நீங்கள் உண்மையில் கிளம்பிய நேரம்</span></label>
+        <input id="m-out" type="time">
+        <label for="m-why">What happened? <span>என்ன நடந்தது</span></label>
+        <textarea id="m-why" rows="2" maxlength="300" placeholder="e.g. forgot to punch out before leaving"></textarea>
+        <div class="ans"><button class="g" type="button" onclick="document.getElementById('missedForm').classList.add('hide')">Back</button><button class="y" type="button" onclick="sendMissed()">Send to Sarah</button></div>
+        <div class="err" id="e-missed"></div>
+      </div>
+      <span class="chg hide" id="missedLink" onclick="document.getElementById('missedForm').classList.remove('hide')">Report it now →</span>
+    </div>
     <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval" id="oval"></div>
       <div class="prompt" id="prompt"><span class="stp" id="p-step"></span><div id="p-en"></div><small id="p-ta"></small></div></div>
     <div class="gps"><span class="dot wait" id="gdot"></span><span id="gtxt">Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது</span></div>
@@ -275,6 +287,17 @@ function renderShifts() {
       return `<div class="sitem"><div class="row"><b>${dLab(s.date)} · ${s.start}–${s.end}</b>${tag}</div><small>${escH(s.store)} · ${s.hours} h${s.note ? ' · ' + escH(s.note) : ''}</small>${body}<div class="err" id="e-${s.shiftId}"></div></div>`;
     }).join('');
 }
+async function sendMissed() {
+  err('e-missed');
+  const outT = $('m-out').value, why = $('m-why').value.trim();
+  if (!outT) return err('e-missed', 'Pick the time you left · நேரத்தைத் தேர்ந்தெடுக்கவும்');
+  if (why.length < 5) return err('e-missed', 'Tell Sarah what happened · என்ன நடந்தது என்று எழுதவும்');
+  try {
+    await api({ action: 'staffRequest', id: S.id, pin: S.pin, kind: 'MISSED_PUNCHOUT', data: { outT, reason: why } });
+    $('missedMsg').textContent = 'Sent to Sarah for approval. You can carry on punching in as usual.';
+    $('missedForm').classList.add('hide'); $('missedLink').classList.add('hide');
+  } catch (e) { err('e-missed', e.message); }
+}
 async function answer(id, ans) {
   const fb = ans === 'REJECT' ? (($('fb') || {}).value || '').trim() : '';
   if (ans === 'REJECT' && fb.length < 3) return err('e-' + id, 'Please write a reason · காரணத்தை எழுதவும்');
@@ -292,14 +315,18 @@ async function login() {
   $('b-login').disabled = true;
   try {
     const st = await api({ action: 'staffStatus', id, pin });
-    S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '' };
+    S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '', missed: st.missedPunch || null };
     $('hello').textContent = 'Hi ' + st.name.split(' ')[0] + ' 👋';
-    const longAgo = st.next === 'OUT' && (Date.now() - new Date(st.openSince).getTime()) > 14 * 3600000;
     $('state').innerHTML = st.next === 'OUT'
-      ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>` +
-        (longAgo ? `<br><b style="color:var(--bad)">That was over 14 hours ago. If you forgot to punch out yesterday, tell your manager after this.</b>` : '')
+      ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>`
       : `You are not punched in. Start your shift.<br><span class="muted">பணியைத் தொடங்க வருகையைப் பதிவு செய்யவும்</span>`;
     $('b-punch').innerHTML = (st.next === 'OUT' ? 'Start face check · Punch OUT' : 'Start face check · Punch IN') + '<small>முக சரிபார்ப்பைத் தொடங்கவும்</small>';
+    $('missedCard').classList.toggle('hide', !S.missed);
+    if (S.missed) {
+      $('missedMsg').innerHTML = `You punched IN at ${fmtTime(S.missed.time)} on ${fmtDay(S.missed.time)} but it was never closed with a punch OUT — that shift is past the 3:15am cutoff, so you can't close it yourself anymore.` +
+        (S.missed.count > 1 ? ` (${S.missed.count} shifts are waiting on this.)` : '') + ` Report it and Sarah will add the OUT time.`;
+      $('missedLink').classList.remove('hide'); $('missedForm').classList.add('hide'); $('m-out').value = ''; $('m-why').value = ''; err('e-missed');
+    }
     show('s-punch'); startGps(); startCam(); Live.load().catch(() => {});   // start downloading the face model early
     loadShifts();
   } catch (e) { err('e-login', e.message); }
