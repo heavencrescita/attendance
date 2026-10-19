@@ -140,11 +140,24 @@ function importedShifts(rows) {
 }
 
 function daysInMonth(month) { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).getDate(); }
+function addMonths(month, n) { const y = Number(month.slice(0, 4)), m0 = Number(month.slice(5, 7)) - 1 + n; return (y + Math.floor(m0 / 12)) + '-' + String(((m0 % 12) + 12) % 12 + 1).padStart(2, '0'); }
+// Payroll periods run the 15th of one month through the 14th of the next, named for the month they END
+// in — period "2026-10" is 15 Sep through 14 Oct 2026 (30 days). Mirrors periodBounds_/periodOf_ in Code.gs.
+function periodRange(month) {
+  const startDate = addMonths(month, -1) + '-15', endDate = month + '-14';
+  const start = new Date(startDate + 'T00:00:00+05:30').getTime(), end = new Date(month + '-15T00:00:00+05:30').getTime();
+  return { startDate, endDate, start, end, days: Math.round((end - start) / 86400000) };
+}
+function periodOf(ymd) { const mo = String(ymd).slice(0, 7), day = Number(String(ymd).slice(8, 10)); return day >= 15 ? addMonths(mo, 1) : mo; }
 function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
 
 // e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
 function calcPay(e, shifts, ctx) {
-  const cfg = ctx.cfg, calDays = daysInMonth(ctx.month), workDays = calDays - Number(cfg.weekOffsPerMonth || 4);
+  // calDays: pass ctx.calDays explicitly once the caller knows whether this month was paid on the old
+  // calendar-month convention or the new 15th–14th cycle (Code.gs computes this from V9Ref history).
+  // Falls back to plain calendar days of the named month when not given — e.g. in tests against months
+  // that predate the 15th–14th cycle, where that's exactly the right (and only ever used) convention.
+  const cfg = ctx.cfg, calDays = ctx.calDays != null ? Number(ctx.calDays) : daysInMonth(ctx.month), workDays = calDays - Number(cfg.weekOffsPerMonth || 4);
   const halfH = Number(cfg.halfDayHrs || 4), otMult = Number(cfg.otMultiplier || 1);
   const duty = Number(e.duty) || 9, plan = Number(e.plan) || 0;
   const worked = shifts.filter(x => x.hours > 0);
@@ -198,7 +211,8 @@ const rs = n => (n < 0 ? '−₹' : '₹') + Math.abs(Math.round(n)).toLocaleStr
 const store = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } };
 const CATS_D = ['COMPLAINT', 'UNI/HYG/TRNG', 'DISCIPLINE', 'ADVANCE', 'T-SHIRT/EQUIP', 'CASH SHORT', 'OTHER'];
 const CATS_A = ['BONUS', 'INCENTIVE', 'Accident Coverage', 'ARREARS', 'OTHER'];
-const nowMonth = () => new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 7);
+const nowMonth = () => periodOf(new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10));
+const addDay = ymd => new Date(new Date(ymd + 'T12:00:00+05:30').getTime() + 86400000).toISOString().slice(0, 10);
 let ST = { token: store('bwc_tok'), month: store('bwc_month') || nowMonth(), tab: 'overview', day: null, branch: 'ALL', D: null, selfies: {} };
 
 async function api(body, quiet) {
@@ -255,7 +269,7 @@ function derive() {
   D.byEmp = {}; D.issues = [];
   D.employees.forEach(e => {
     const b = buildShifts(D.punches.filter(p => p.empId === e.id));
-    b.inMonth = b.shifts.filter(s => s.date.slice(0, 7) === D.month)
+    b.inMonth = b.shifts.filter(s => periodOf(s.date) === D.month)
       .concat(importedShifts((D.importedShifts || []).filter(r => r.empId === e.id))).sort((x, y) => (x.date + x.in).localeCompare(y.date + y.in));
     D.byEmp[e.id] = b;
     b.issues.forEach(i => D.issues.push(Object.assign({ emp: e }, i)));
@@ -266,7 +280,7 @@ function derive() {
   const asOf = e => { const v = D.v9[e.id]; if (!v || v.plan === '' || v.plan == null) return e;
     return Object.assign({}, e, { name: v.name || e.name, branch: v.branch || e.branch, payType: v.payType || e.payType, plan: Number(v.plan), duty: Number(v.duty) || e.duty,
       status: v.status || e.status, woEligible: v.woEligible || e.woEligible, woDays: v.woDays === '' ? e.woDays : v.woDays, dailyRate: Number(v.dailyRate) || 0 }); };
-  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff }), branchSplit: branchSplit(D.byEmp[e.id].inMonth) }));
+  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff, calDays: D.calDays }), branchSplit: branchSplit(D.byEmp[e.id].inMonth) }));
   D.hasV9 = (D.v9Ref || []).length > 0;
   D.unmatched = (D.importedShifts || []).filter(r => !r.empId);
   D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
@@ -274,7 +288,8 @@ function derive() {
   D.v9Match = D.pay.filter(x => x.v9 !== null && x.v9 === x.r.net).length;
   derivePlan();
   const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
-  if (!ST.day || ST.day.slice(0, 7) !== D.month) ST.day = today.slice(0, 7) === D.month ? today : D.month + '-01';
+  const pr = D.periodStart && D.periodEnd ? { startDate: D.periodStart, endDate: D.periodEnd } : periodRange(D.month);
+  if (!ST.day || ST.day < pr.startDate || ST.day > pr.endDate) ST.day = (today >= pr.startDate && today <= pr.endDate) ? today : pr.startDate;
 }
 const branchName = c => (ST.D.storeName[c] || c);
 const LATE_GRACE_MIN = 10;
@@ -298,7 +313,7 @@ function derivePlan() {
   }).sort((a, b) => a.st - b.st);
   const planned = new Set(plan.map(s => s.empId + '|' + s.date));
   const planStores = new Set(plan.map(s => s.store));
-  const unplanned = ins.filter(p => !used.has(p.punchId) && planStores.has(p.store) && !planned.has(p.empId + '|' + String(p.time).slice(0, 10)) && String(p.time).slice(0, 7) === D.month);
+  const unplanned = ins.filter(p => !used.has(p.punchId) && planStores.has(p.store) && !planned.has(p.empId + '|' + String(p.time).slice(0, 10)) && periodOf(String(p.time).slice(0, 10)) === D.month);
   D.plan = { rows, unplanned };
 }
 
@@ -504,9 +519,10 @@ function monthView() {
   const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
     return `<b>${rs(r)}</b> ${d > 12 ? `<span class="tag t-warn">▲ ${d.toFixed(0)}% above avg</span>` : d < -12 ? `<span class="tag t-ok">▼ ${(-d).toFixed(0)}% below avg</span>` : '<span class="tag t-mute">≈ avg</span>'}`; };
   const otTag = b => { const s = pct(b.ot, b.base + b.ot); return s >= 10 ? `<span class="tag t-bad">${s.toFixed(0)}%</span>` : s >= 5 ? `<span class="tag t-warn">${s.toFixed(0)}%</span>` : `<span class="muted">${s.toFixed(0)}%</span>`; };
-  // shifts in the month
-  const shifts = []; D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => { if (s.date.slice(0, 7) === D.month && s.hours > 0) shifts.push(Object.assign({ emp: e }, s)); }));
-  const dim = daysInMonth(D.month), days = Array.from({ length: dim }, (_, i) => D.month + '-' + String(i + 1).padStart(2, '0'));
+  // shifts in the period
+  const shifts = []; D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => { if (periodOf(s.date) === D.month && s.hours > 0) shifts.push(Object.assign({ emp: e }, s)); }));
+  const prD = D.periodStart && D.periodEnd ? { startDate: D.periodStart, endDate: D.periodEnd } : periodRange(D.month);
+  const days = []; for (let d = prD.startDate; d <= prD.endDate; d = addDay(d)) days.push(d);
   const hb = {}; shifts.forEach(s => { const k = s.store || s.emp.branch; (hb[k] = hb[k] || {})[s.date] = (hb[k][s.date] || 0) + 1; });
   const hbRows = Object.keys(hb).sort((a, b) => branchName(a).localeCompare(branchName(b)));
   const hmax = Math.max(1, ...hbRows.flatMap(k => Object.values(hb[k])));
@@ -552,8 +568,8 @@ function monthView() {
   <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Staffing calendar · people on shift each day</h2><div class="sp"></div>
     <span class="lg">fewer <span class="ramp"></span> more</span></div>
     <div class="scroll" style="margin-top:8px"><table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Avg/day</th></tr></thead><tbody>
-    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] || 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} on shift">${v || ''}</td>`; }).join('')}<td class="num">${(tot / dim).toFixed(1)}</td></tr>`; }).join('')}
-    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} shifts">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / dim).toFixed(1)}</td></tr>
+    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] || 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} on shift">${v || ''}</td>`; }).join('')}<td class="num">${(tot / days.length).toFixed(1)}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} shifts">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / days.length).toFixed(1)}</td></tr>
     </tbody></table></div></div>
   <div class="grid three" style="margin-top:14px">
     <div class="card"><h2>Average people on shift by weekday</h2>${colChart(dowAvg, v => v.toFixed(0))}</div>
@@ -609,7 +625,7 @@ function daily() {
   const pending = D.punches.filter(p => p.status === 'FLAGGED' && p.time.slice(0, 10) === day);
   $('#main').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Daily attendance</h2><div class="sp"></div>
-      <input type="date" style="width:auto" value="${day}" min="${D.month}-01" max="${D.month}-${String(daysInMonth(D.month)).padStart(2, '0')}" onchange="ST.day=this.value;render()">
+      <input type="date" style="width:auto" value="${day}" min="${D.periodStart || periodRange(D.month).startDate}" max="${D.periodEnd || periodRange(D.month).endDate}" onchange="ST.day=this.value;render()">
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div></div>
     <p class="muted">${rows.filter(r => r.s.length || r.open.length).length} worked · ${pending.length} punch(es) waiting for review that day are not counted yet. Tap a selfie to load it.</p>
     <div class="scroll"><table><thead><tr><th>Employee</th><th>Store</th><th>IN</th><th>OUT</th><th class="num">Hours</th><th>Status</th><th>Selfie IN</th><th>Selfie OUT</th></tr></thead><tbody>
@@ -778,7 +794,7 @@ function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ ac
 // Payslips reach staff in My BWC only after a month is released here
 function releaseCard() {
   const D = ST.D; if (D.role !== 'admin' && D.role !== 'hr') return '';
-  const rel = (D.releases || []).find(r => r.month === D.month), closed = D.month < D.now.slice(0, 7);
+  const rel = (D.releases || []).find(r => r.month === D.month), closed = D.month < periodOf(D.now.slice(0, 10));
   if (rel) return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--ok)"><div class="row"><div><b>Payslips released to staff</b><div class="muted">${esc(D.monthLabel)} · released by ${esc(rel.releasedBy)} on ${String(rel.releasedAt).slice(0, 16).replace('T', ' ')}. Staff see these figures in My BWC.</div></div><div class="sp"></div><button class="btn" onclick="withdrawRelease()">Withdraw</button></div></div>`;
   return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="row"><div><b>Not released to staff</b><div class="muted">${closed ? `Staff see their ${esc(D.monthLabel)} attendance but no pay. Release once the payout is done — ${D.hasV9 ? 'the imported payroll figures' : 'the figures on this page'} become their payslips.` : `${esc(D.monthLabel)} is still running. Pay can be released after the month closes.`}</div></div><div class="sp"></div>${closed ? `<button class="btn g" onclick="releasePay()">Release payslips</button>` : ''}</div></div>`;
 }
