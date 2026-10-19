@@ -94,9 +94,36 @@ select,textarea,input.sm{width:100%;font-size:16px;padding:11px 12px;border:2px 
 <section id="s-home" class="hide">
   <div class="card home"><h2 id="h-hello"></h2>
     <button class="y" onclick="openPlanner()">Shift planner<span id="h-plan">Plan shifts and see who accepted</span></button>
+    <button class="t" onclick="openPettyCash()">Petty cash<span id="h-petty">Submit a store expense with invoice photos</span></button>
     <button class="k" onclick="openSetup()">Store location setup<span>One-time GPS + photos for each store</span></button>
     <button class="g" onclick="logout()">Log out</button>
     <p class="muted" style="font-size:13px;margin:12px 0 0">To punch your own attendance use the staff link: heavencrescita.github.io/attendance/</p></div>
+</section>
+
+<section id="s-petty" class="hide">
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px"><h2 style="flex:1;margin:0">Petty cash</h2><a onclick="goHome()" style="font-weight:700;color:#0a6e6f;cursor:pointer">‹ Back</a></div>
+    <div id="pc-none" class="warn hide"></div>
+    <div id="pc-main">
+      <label style="margin-top:10px">Store</label><select id="pc-store"></select>
+      <label>Category</label><select id="pc-cat" onchange="$('pc-catother').classList.toggle('hide', $('pc-cat').value !== 'Other')">
+        <option>Cleaning supplies</option><option>Repairs &amp; maintenance</option><option>Stationery &amp; printing</option>
+        <option>Transport / delivery</option><option>Pest control</option><option>Water / gas refill</option>
+        <option>Staff refreshments</option><option value="Other">Other</option>
+      </select>
+      <input class="sm hide" id="pc-catother" maxlength="60" placeholder="Describe the category" style="margin-top:8px">
+      <label>Amount <span>₹, up to ₹50,000</span></label><input id="pc-amount" type="number" inputmode="decimal" min="1" max="50000" step="1">
+      <label>What was this for? <span>a short note for Sarah</span></label><textarea id="pc-note" class="sm" rows="2" maxlength="300"></textarea>
+      <label>Invoice photos <span>up to 3 — take a clear photo of each receipt</span></label>
+      <input type="file" id="pc-file" accept="image/*" capture="environment" multiple onchange="addPettyPhotos(this.files)">
+      <div class="thumbs" id="pc-thumbs"></div>
+      <div class="err" id="e-petty"></div>
+      <button class="y" id="pc-submit" onclick="submitPetty()">Submit for Sarah's approval</button>
+    </div>
+    <h3 style="margin:22px 0 4px;font-size:15px">Your past submissions</h3>
+    <div id="pc-list"><p class="muted" style="font-size:13px">None yet</p></div>
+    <button class="g" onclick="goHome()">Back</button>
+  </div>
 </section>
 
 <section id="s-plan" class="hide">
@@ -287,7 +314,7 @@ const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5
 const $ = id => document.getElementById(id);
 let M = {}, W = {}, cam = null, watch = null;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function show(id) { ['s-login', 's-home', 's-plan', 's-stores', 's-wiz'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
+function show(id) { ['s-login', 's-home', 's-plan', 's-petty', 's-stores', 's-wiz'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 async function api(body) { const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) }); const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j; }
 
@@ -296,7 +323,7 @@ async function login() {
   try {
     const id = $('wid').value.replace(/\D/g, ''), pin = $('pin').value.replace(/\D/g, '');
     const r = await api({ action: 'managerStatus', id, pin });
-    M = { id: r.id, pin, name: r.name, stores: r.stores, ch: r.challenge, maxAcc: r.maxAccM || 30, chAt: Date.now(), planStores: r.planStores || [] };
+    M = { id: r.id, pin, name: r.name, stores: r.stores, ch: r.challenge, maxAcc: r.maxAccM || 30, chAt: Date.now(), planStores: r.planStores || [], pettyCash: r.pettyCash || [] };
     goHome();
   } catch (e) { err('e-login', e.message); } finally { $('b-login').disabled = false; }
 }
@@ -308,7 +335,7 @@ function renderStores() {
     return `<div class="store ${s.locked ? 'locked' : ''}" ${s.locked ? '' : `onclick="startWiz('${s.code}')"`}><div style="flex:1"><b>${esc(s.name)}</b>${sub}</div>${tag}</div>`;
   }).join('');
 }
-async function relogin() { const r = await api({ action: 'managerStatus', id: M.id, pin: M.pin }); M.stores = r.stores; M.ch = r.challenge; M.chAt = Date.now(); }
+async function relogin() { const r = await api({ action: 'managerStatus', id: M.id, pin: M.pin }); M.stores = r.stores; M.ch = r.challenge; M.chAt = Date.now(); M.planStores = r.planStores || []; M.pettyCash = r.pettyCash || []; }
 
 /* ---------- wizard ---------- */
 function stepBar(n) { for (let i = 1; i <= 5; i++) $('st' + i).className = i < n ? 'done' : i === n ? 'on' : ''; }
@@ -396,9 +423,81 @@ async function backToStores() { stopAll(); $('b-cancel').classList.remove('hide'
 function goHome() {
   stopAll(); $('hsub').textContent = 'Managers'; $('h-hello').textContent = 'Hi ' + M.name.split(' ')[0];
   $('h-plan').textContent = M.planStores.length ? 'Your stores: ' + M.planStores.map(s => s.name).join(', ') : 'No stores assigned yet — ask the admin';
+  const pend = (M.pettyCash || []).filter(p => p.status === 'PENDING').length;
+  $('h-petty').textContent = pend ? pend + ' waiting on Sarah' : 'Submit a store expense with invoice photos';
   show('s-home');
 }
 function openSetup() { $('hsub').textContent = 'Store location setup'; renderStores(); show('s-stores'); Live.load().catch(() => {}); }
+
+/* ---------- petty cash ---------- */
+const PC = { photos: [] };
+const PC_STATUS = { PENDING: ['Waiting on Sarah', 't-warn'], APPROVED: ['Approved', 't-ok'], REJECTED: ['Rejected', 't-bad'] };
+function dataUrlBytes(u) { const b64 = (u.split(',')[1] || ''); return Math.floor(b64.length * 3 / 4); }
+function fileToJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1400; let w = img.naturalWidth, h = img.naturalHeight;
+      if (Math.max(w, h) > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      let q = 0.85, out = c.toDataURL('image/jpeg', q);
+      while (dataUrlBytes(out) > 1.3 * 1024 * 1024 && q > 0.3) { q -= 0.15; out = c.toDataURL('image/jpeg', q); }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that photo')); };
+    img.src = url;
+  });
+}
+function renderPettyThumbs() {
+  $('pc-thumbs').innerHTML = PC.photos.map((p, i) => `<div style="position:relative"><img src="${p}"><a onclick="removePettyPhoto(${i})" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.7);color:#fff;border-radius:50%;width:24px;height:24px;display:grid;place-items:center;font-weight:800;cursor:pointer">×</a></div>`).join('');
+}
+async function addPettyPhotos(files) {
+  err('e-petty');
+  for (const f of Array.from(files)) {
+    if (PC.photos.length >= 3) { err('e-petty', 'Up to 3 invoice photos'); break; }
+    try { PC.photos.push(await fileToJpeg(f)); } catch (e) { err('e-petty', e.message); }
+  }
+  $('pc-file').value = ''; renderPettyThumbs();
+}
+function removePettyPhoto(i) { PC.photos.splice(i, 1); renderPettyThumbs(); }
+function renderPettyList() {
+  const list = M.pettyCash || [];
+  const storeName = code => { const s = (M.planStores || []).find(x => x.code === code); return s ? s.name : code; };
+  $('pc-list').innerHTML = list.length ? list.map(p => {
+    const [lab, cls] = PC_STATUS[p.status] || [p.status, 't-mute'];
+    return `<div class="sh"><div class="who"><b>₹${p.amount} · ${esc(p.category)}</b><small>${esc(storeName(p.store))} · ${p.date} · ${esc(p.note)}</small>${p.status !== 'PENDING' && p.decisionNote ? `<span class="fb" style="color:var(--muted)">“${esc(p.decisionNote)}”</span>` : ''}</div>
+      <div class="acts"><span class="tag ${cls}">${lab}</span></div></div>`;
+  }).join('') : '<p class="muted" style="font-size:13px">None yet</p>';
+}
+function openPettyCash() {
+  $('hsub').textContent = 'Petty cash'; err('e-petty'); show('s-petty');
+  const none = !M.planStores.length;
+  $('pc-none').classList.toggle('hide', !none); $('pc-main').classList.toggle('hide', none);
+  if (none) { $('pc-none').textContent = 'No stores are assigned to you yet. Ask the admin to tick your stores in Admin → Employees → Edit.'; renderPettyList(); return; }
+  $('pc-store').innerHTML = M.planStores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
+  $('pc-cat').value = 'Cleaning supplies'; $('pc-catother').classList.add('hide'); $('pc-catother').value = '';
+  $('pc-amount').value = ''; $('pc-note').value = ''; PC.photos = []; renderPettyThumbs();
+  renderPettyList();
+}
+async function submitPetty() {
+  err('e-petty');
+  const store = $('pc-store').value, amount = Number($('pc-amount').value), note = $('pc-note').value.trim();
+  const category = $('pc-cat').value === 'Other' ? $('pc-catother').value.trim() : $('pc-cat').value;
+  if (!(amount > 0 && amount <= 50000)) return err('e-petty', 'Enter a valid amount, up to ₹50,000');
+  if (!category) return err('e-petty', 'Describe the category');
+  if (note.length < 3) return err('e-petty', 'Describe what this expense was for');
+  if (!PC.photos.length) return err('e-petty', 'Attach at least one invoice photo');
+  $('pc-submit').disabled = true; $('pc-submit').textContent = 'Submitting…';
+  try {
+    await api({ action: 'staffRequest', id: M.id, pin: M.pin, kind: 'PETTY_CASH', data: { store, category, amount, note, photos: PC.photos } });
+    try { await relogin(); } catch (e) {}
+    $('pc-amount').value = ''; $('pc-note').value = ''; PC.photos = []; renderPettyThumbs(); renderPettyList();
+    err('e-petty'); alert('Submitted — Sarah will review it.');
+  } catch (e) { err('e-petty', e.message); }
+  finally { $('pc-submit').disabled = false; $('pc-submit').textContent = "Submit for Sarah's approval"; }
+}
 
 /* ---------- shift planner ---------- */
 const P = { from: null, data: null };
