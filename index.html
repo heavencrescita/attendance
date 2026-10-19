@@ -323,7 +323,7 @@ async function login() {
     $('b-punch').innerHTML = (st.next === 'OUT' ? 'Start face check · Punch OUT' : 'Start face check · Punch IN') + '<small>முக சரிபார்ப்பைத் தொடங்கவும்</small>';
     $('missedCard').classList.toggle('hide', !S.missed);
     if (S.missed) {
-      $('missedMsg').innerHTML = `You punched IN at ${fmtTime(S.missed.time)} on ${fmtDay(S.missed.time)} but it was never closed with a punch OUT — that shift is past the 3:15am cutoff, so you can't close it yourself anymore.` +
+      $('missedMsg').innerHTML = `You punched IN at ${fmtTime(S.missed.time)} on ${fmtDay(S.missed.time)} but it was never closed with a punch OUT — that shift is past the 4:00am cutoff, so you can't close it yourself anymore.` +
         (S.missed.count > 1 ? ` (${S.missed.count} shifts are waiting on this.)` : '') + ` Report it and Sarah will add the OUT time.`;
       $('missedLink').classList.remove('hide'); $('missedForm').classList.add('hide'); $('m-out').value = ''; $('m-why').value = ''; err('e-missed');
     }

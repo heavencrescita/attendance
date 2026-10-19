@@ -224,6 +224,16 @@ function graceAdjustEpoch_(epoch, hm) {
   return m ? epoch - Number(m[1]) * 60000 : epoch;
 }
 
+// Self-service punch-out stays open until 4:00am (PUNCHOUT_CUTOFF_HM in Code.gs) so closing-up time
+// doesn't lock staff into a missed-punchout request, but hours worked still stop counting at 3:00am —
+// an OUT anywhere from 03:00 up to the 4am cutoff is paid as if it happened at 03:00 exactly. dateStr/hm
+// are the OUT punch's local date/"HH:MM"; returns the epoch to use for hours worked.
+function capOutEpoch_(dateStr, hm, epoch) {
+  const m = /^(\d{2}):(\d{2})$/.exec(hm || ''); if (!m) return epoch;
+  const mins = Number(m[1]) * 60 + Number(m[2]);
+  return (mins >= 180 && mins < 240) ? new Date(dateStr + 'T03:00:00+05:30').getTime() : epoch;
+}
+
 // Pair punches into shifts for one employee. Returns {shifts, issues}.
 function buildShifts(punches, now) {
   now = now || Date.now();
@@ -237,7 +247,7 @@ function buildShifts(punches, now) {
       if (open && Number(p.epoch) - Number(open.epoch) <= MAX_SHIFT_MS) {
         const i = istParts(open.time), o = istParts(p.time);
         shifts.push({ date: i.date, day: Number(i.date.slice(8, 10)), in: i.time, out: o.time + (o.date !== i.date ? ' +1' : ''),
-          hours: (Number(p.epoch) - graceAdjustEpoch_(Number(open.epoch), i.time)) / 3600000, store: open.store, inPunch: open, outPunch: p });
+          hours: (capOutEpoch_(o.date, o.time, Number(p.epoch)) - graceAdjustEpoch_(Number(open.epoch), i.time)) / 3600000, store: open.store, inPunch: open, outPunch: p });
         if ((Number(p.epoch) - Number(open.epoch)) / 3600000 > LONG_SHIFT_H) issues.push({ kind: 'Very long shift — check', punch: open, counted: true });
         open = null;
       } else issues.push({ kind: 'OUT without IN', punch: p });
