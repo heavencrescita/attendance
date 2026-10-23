@@ -160,8 +160,16 @@ function periodRange(month) {
 }
 function periodOf(ymd) { const mo = String(ymd).slice(0, 7), day = Number(String(ymd).slice(8, 10)); return day >= 15 ? addMonths(mo, 1) : mo; }
 function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
+// Count distinct accepted Week Off days a manager planned for this employee, within the payroll period.
+// Planner dates are the source of truth once any exist for that employee in-period — they override both
+// the admin monthly override (WeekOff sheet) and the rule-based auto-calc below.
+function weekOffDaysFromPlanner(plannerShifts, empId, pr) {
+  const days = new Set();
+  (plannerShifts || []).forEach(s => { if (s.empId === empId && s.type === 'WEEKOFF' && s.status === 'ACCEPTED' && s.date >= pr.startDate && s.date <= pr.endDate) days.add(s.date); });
+  return days.size;
+}
 
-// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
+// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff, plannerShifts}
 function calcPay(e, shifts, ctx) {
   // calDays: pass ctx.calDays explicitly once the caller knows whether this month was paid on the old
   // calendar-month convention or the new 15th–14th cycle (Code.gs computes this from V9Ref history).
@@ -179,8 +187,11 @@ function calcPay(e, shifts, ctx) {
   const rate = eligible ? plan / (calDays * duty) : (Number(e.dailyRate) || plan / calDays) / duty;
   const wo = (ctx.weekOff || []).find(w => w.empId === e.id);
   const ruleCredit = eligible ? Math.min(woMax, days >= workDays ? woMax : Math.floor((days + 1) / 7)) : 0;
-  const creditDays = wo ? Number(wo.days) : ruleCredit;
-  const creditSource = wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
+  const pr = periodRange(ctx.month);
+  const plannedWO = ctx.plannerShifts ? weekOffDaysFromPlanner(ctx.plannerShifts, e.id, pr) : 0;
+  const hasPlannerData = ctx.plannerShifts && (ctx.plannerShifts || []).some(s => s.empId === e.id && s.type === 'WEEKOFF' && s.date >= pr.startDate && s.date <= pr.endDate);
+  const creditDays = hasPlannerData ? plannedWO : (wo ? Number(wo.days) : ruleCredit);
+  const creditSource = hasPlannerData ? 'planned (' + plannedWO + ' days)' : wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
   const creditH = creditDays * duty;
   const active = e.status === 'Active';
   let base = 0, otH = 0, otPay = 0, basis;
@@ -213,7 +224,7 @@ function branchSplit(shifts) {
   if (!tot) return null;
   return Object.keys(by).map(b => ({ branch: b, hrs: by[b], frac: by[b] / tot })).sort((a, b) => b.frac - a.frac);
 }
-
+if (typeof module !== 'undefined') module.exports = { buildShifts, importedShifts, calcPay, daysInMonth, branchSplit, graceAdjustEpoch_, periodRange, periodOf, capOutEpoch_, weekOffDaysFromPlanner };
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -290,7 +301,7 @@ function derive() {
   const asOf = e => { const v = D.v9[e.id]; if (!v || v.plan === '' || v.plan == null) return e;
     return Object.assign({}, e, { name: v.name || e.name, branch: v.branch || e.branch, payType: v.payType || e.payType, plan: Number(v.plan), duty: Number(v.duty) || e.duty,
       status: v.status || e.status, woEligible: v.woEligible || e.woEligible, woDays: v.woDays === '' ? e.woDays : v.woDays, dailyRate: Number(v.dailyRate) || 0 }); };
-  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff, calDays: D.calDays }), branchSplit: branchSplit(D.byEmp[e.id].inMonth) }));
+  D.pay = D.employees.map(e => ({ e: asOf(e), r: calcPay(asOf(e), D.byEmp[e.id].inMonth, { month: D.month, cfg: D.config, ded: D.deductions, add: D.additions, weekOff: D.weekOff, calDays: D.calDays, plannerShifts: D.shifts }), branchSplit: branchSplit(D.byEmp[e.id].inMonth) }));
   D.hasV9 = (D.v9Ref || []).length > 0;
   D.unmatched = (D.importedShifts || []).filter(r => !r.empId);
   D.pay.forEach(x => { const v = D.v9[x.e.id]; x.v9 = v ? Number(v.net) : null; });
@@ -302,14 +313,17 @@ function derive() {
   if (!ST.day || ST.day < pr.startDate || ST.day > pr.endDate) ST.day = (today >= pr.startDate && today <= pr.endDate) ? today : pr.startDate;
 }
 const branchName = c => (ST.D.storeName[c] || c);
+const ampm_ = hm => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || '').trim()); if (!m) return hm || ''; let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + m[2] + ' ' + ap; };
 const LATE_GRACE_MIN = 10;
 // Planned vs actual (report only — pay is still calculated from punches)
 function derivePlan() {
   const D = ST.D, now = Date.now();
   const plan = (D.shifts || []).filter(s => s.status !== 'CANCELLED');
+  const work = plan.filter(s => !s.type || s.type === 'WORK');
+  const dayOff = plan.filter(s => s.type === 'WEEKOFF' || s.type === 'LEAVE');
   const ins = D.punches.filter(p => p.type === 'IN' && p.status !== 'REJECTED');
   const used = new Set();
-  const rows = plan.map(s => {
+  const rows = work.map(s => {
     const st = Date.parse(s.date + 'T' + s.start + ':00+05:30'), dur = Number(s.hours) * 3600000, en = st + dur;
     const cand = ins.filter(p => p.empId === s.empId && !used.has(p.punchId) && Number(p.epoch) > st - 4 * 3600000 && Number(p.epoch) < st + 8 * 3600000)
       .sort((a, b) => Math.abs(a.epoch - st) - Math.abs(b.epoch - st))[0];
@@ -321,10 +335,11 @@ function derivePlan() {
     } else res = st > now ? 'Upcoming' : en > now ? 'Not in yet' : 'No-show';
     return { s, st, inPunch: cand, late, out, res };
   }).sort((a, b) => a.st - b.st);
-  const planned = new Set(plan.map(s => s.empId + '|' + s.date));
-  const planStores = new Set(plan.map(s => s.store));
+  const dayOffRows = dayOff.map(s => ({ s, st: Date.parse(s.date + 'T00:00:00+05:30'), inPunch: null, late: 0, out: '', res: s.status === 'REJECTED' ? 'Rejected' : '' })).sort((a, b) => a.st - b.st);
+  const planned = new Set(work.map(s => s.empId + '|' + s.date));
+  const planStores = new Set(work.map(s => s.store));
   const unplanned = ins.filter(p => !used.has(p.punchId) && planStores.has(p.store) && !planned.has(p.empId + '|' + String(p.time).slice(0, 10)) && periodOf(String(p.time).slice(0, 10)) === D.month);
-  D.plan = { rows, unplanned };
+  D.plan = { rows: rows.concat(dayOffRows).sort((a, b) => a.st - b.st), unplanned };
 }
 
 /* ---------------- SHELL ---------------- */
@@ -375,10 +390,11 @@ function shiftPlan() {
     <div class="row" style="gap:6px;margin:14px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
     <div class="scroll"><table><thead><tr><th>Date</th><th>Store</th><th>Employee</th><th>Planned</th><th>Reply</th><th>Actual IN–OUT</th><th>Result</th><th>Planned by</th></tr></thead><tbody>
     ${rows.filter(filt).map(r => { const [l, c] = ack[r.s.status] || [r.s.status, 't-mute'];
-      return `<tr><td>${esc(r.s.date)}</td><td>${esc(branchName(r.s.store))}</td><td><b>${esc(r.s.name)}</b> <span class="muted">${r.s.empId}</span></td><td>${r.s.start}–${r.s.end}${r.s.note ? `<div class="muted">${esc(r.s.note)}</div>` : ''}</td>
+      const planned = r.s.type === 'WEEKOFF' ? '<span class="tag t-ok">Week off</span>' : r.s.type === 'LEAVE' ? '<span class="tag t-mute">Leave</span>' : `${ampm_(r.s.start)}–${ampm_(r.s.end)}`;
+      return `<tr><td>${esc(r.s.date)}</td><td>${esc(branchName(r.s.store))}</td><td><b>${esc(r.s.name)}</b> <span class="muted">${r.s.empId}</span></td><td>${planned}${r.s.note ? `<div class="muted">${esc(r.s.note)}</div>` : ''}</td>
         <td><span class="tag ${c}">${l}</span>${r.s.feedback ? `<div class="muted" style="max-width:220px">“${esc(r.s.feedback)}”</div>` : ''}</td>
-        <td>${r.inPunch ? esc(String(r.inPunch.time).slice(11, 16)) + (r.out ? '–' + esc(r.out) : ' (still in)') + (r.inPunch.status === 'FLAGGED' ? ' <span class="tag t-warn">review</span>' : '') : '—'}</td>
-        <td>${resTag(r)}</td><td class="muted">${esc(String(r.s.plannedBy || '').split(' ').slice(1).join(' ') || r.s.plannedBy)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted">Nothing here</td></tr>'}
+        <td>${r.inPunch ? ampm_(esc(String(r.inPunch.time).slice(11, 16))) + (r.out ? '–' + ampm_(esc(r.out)) : ' (still in)') + (r.inPunch.status === 'FLAGGED' ? ' <span class="tag t-warn">review</span>' : '') : '—'}</td>
+        <td>${r.s.type === 'WEEKOFF' || r.s.type === 'LEAVE' ? '—' : resTag(r)}</td><td class="muted">${esc(String(r.s.plannedBy || '').split(' ').slice(1).join(' ') || r.s.plannedBy)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted">Nothing here</td></tr>'}
     </tbody></table></div></div>
     ${un.length ? `<div class="card"><h2>Worked without a planned shift (${un.length})</h2><p class="muted">Punched IN on a day they had no planned shift, at a store that uses planning.</p>
       <div class="scroll"><table><thead><tr><th>Date</th><th>Employee</th><th>Store</th><th>IN</th></tr></thead><tbody>

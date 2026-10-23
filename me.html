@@ -273,8 +273,16 @@ function periodRange(month) {
 }
 function periodOf(ymd) { const mo = String(ymd).slice(0, 7), day = Number(String(ymd).slice(8, 10)); return day >= 15 ? addMonths(mo, 1) : mo; }
 function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
+// Count distinct accepted Week Off days a manager planned for this employee, within the payroll period.
+// Planner dates are the source of truth once any exist for that employee in-period — they override both
+// the admin monthly override (WeekOff sheet) and the rule-based auto-calc below.
+function weekOffDaysFromPlanner(plannerShifts, empId, pr) {
+  const days = new Set();
+  (plannerShifts || []).forEach(s => { if (s.empId === empId && s.type === 'WEEKOFF' && s.status === 'ACCEPTED' && s.date >= pr.startDate && s.date <= pr.endDate) days.add(s.date); });
+  return days.size;
+}
 
-// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff}
+// e: employee row; shifts: that employee's shifts dated inside the month; ctx: {month, cfg, ded, add, weekOff, plannerShifts}
 function calcPay(e, shifts, ctx) {
   // calDays: pass ctx.calDays explicitly once the caller knows whether this month was paid on the old
   // calendar-month convention or the new 15th–14th cycle (Code.gs computes this from V9Ref history).
@@ -292,8 +300,11 @@ function calcPay(e, shifts, ctx) {
   const rate = eligible ? plan / (calDays * duty) : (Number(e.dailyRate) || plan / calDays) / duty;
   const wo = (ctx.weekOff || []).find(w => w.empId === e.id);
   const ruleCredit = eligible ? Math.min(woMax, days >= workDays ? woMax : Math.floor((days + 1) / 7)) : 0;
-  const creditDays = wo ? Number(wo.days) : ruleCredit;
-  const creditSource = wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
+  const pr = periodRange(ctx.month);
+  const plannedWO = ctx.plannerShifts ? weekOffDaysFromPlanner(ctx.plannerShifts, e.id, pr) : 0;
+  const hasPlannerData = ctx.plannerShifts && (ctx.plannerShifts || []).some(s => s.empId === e.id && s.type === 'WEEKOFF' && s.date >= pr.startDate && s.date <= pr.endDate);
+  const creditDays = hasPlannerData ? plannedWO : (wo ? Number(wo.days) : ruleCredit);
+  const creditSource = hasPlannerData ? 'planned (' + plannedWO + ' days)' : wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
   const creditH = creditDays * duty;
   const active = e.status === 'Active';
   let base = 0, otH = 0, otPay = 0, basis;
@@ -326,7 +337,7 @@ function branchSplit(shifts) {
   if (!tot) return null;
   return Object.keys(by).map(b => ({ branch: b, hrs: by[b], frac: by[b] / tot })).sort((a, b) => b.frac - a.frac);
 }
-
+if (typeof module !== 'undefined') module.exports = { buildShifts, importedShifts, calcPay, daysInMonth, branchSplit, graceAdjustEpoch_, periodRange, periodOf, capOutEpoch_, weekOffDaysFromPlanner };
 
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
 const $ = id => document.getElementById(id);
@@ -441,7 +452,7 @@ function dayBox() {
   const inf = dayInfo(U.sel), D = U.D;
   return `<div class="day" id="daybox"><h3>${dayLbl(U.sel)}</h3>
     ${inf.sh.map(s => `<div class="shift"><div class="t num">${s.in} – ${s.out}</div><div class="sp"></div><div class="muted">${(+s.hours).toFixed(1)} h · ${esc(D.stores[s.store] || s.store || '')}</div></div>`).join('') || '<div class="muted">No punches on this day.</div>'}
-    ${inf.plan.map(p => `<div class="muted" style="margin-top:6px">Planned: ${p.start}–${p.end} at ${esc(p.store)}</div>`).join('')}
+    ${inf.plan.map(p => `<div class="muted" style="margin-top:6px">Planned: ${p.type === 'WEEKOFF' ? 'Week off (paid)' : p.type === 'LEAVE' ? 'Leave (unpaid)' : p.start + '–' + p.end + ' at ' + esc(p.store)}</div>`).join('')}
     ${U.sel <= todayIST() ? `<button class="btn btn-quiet" onclick="fixSheet('${U.sel}')">Report a wrong or missing punch</button>` : ''}</div>`;
 }
 
@@ -458,7 +469,7 @@ function home() {
     ${D.pay.add ? `<div class="ln"><div class="k">Bonus and other additions</div><div class="v">${rs(D.pay.add)}</div></div>` : ''}
     <div class="ln minus"><div class="k">Deductions</div><div class="v">${D.pay.ded ? '−' + rs(D.pay.ded) : '₹0'}</div></div>
     <button class="btn btn-ghost wide" style="margin-top:14px" onclick="go('pay')">See full payslip</button></div>` : (D.month >= periodOf(todayIST()) ? liveEstimatePanel() : notReleased())}
-  ${up ? `<div class="panel"><h2>Next planned shift</h2><div class="row" style="margin-top:6px"><div><b style="font-size:17px">${dayLbl(up.date)}, ${up.start}–${up.end}</b><div class="muted">${esc(up.store)}</div></div><div class="sp"></div>${stTag(up.status)}</div></div>` : ''}
+  ${up ? `<div class="panel"><h2>Next planned ${up.type === 'WEEKOFF' ? 'week off' : up.type === 'LEAVE' ? 'leave' : 'shift'}</h2><div class="row" style="margin-top:6px"><div><b style="font-size:17px">${dayLbl(up.date)}${up.type === 'WORK' ? ', ' + up.start + '–' + up.end : ''}</b><div class="muted">${up.type === 'WEEKOFF' ? 'Paid' : up.type === 'LEAVE' ? 'Unpaid' : esc(up.store)}</div></div><div class="sp"></div>${stTag(up.status)}</div></div>` : ''}
   ${pendReq ? `<div class="panel"><b>${pendReq} request${pendReq > 1 ? 's are' : ' is'} waiting for your manager.</b> <button class="btn btn-quiet" onclick="go('me')">View</button></div>` : ''}`;
 }
 function att() {
@@ -539,7 +550,9 @@ function shiftsTab() {
       ? `<textarea id="fb" rows="2" maxlength="300" placeholder="Why can't you work this shift?"></textarea><div class="ans"><button class="btn btn-ghost" onclick="U.sh.open=null;render()">Back</button><button class="btn rej" onclick="answer('${s.shiftId}','REJECT')">Send</button></div>`
       : `<div class="ans"><button class="btn acc" onclick="answer('${s.shiftId}','ACCEPT')">Accept</button><button class="btn rej" onclick="U.sh={open:'${s.shiftId}',mode:'REJECT'};render();$('fb').focus()">Reject</button></div>`;
     else body = `${s.status === 'REJECTED' && s.feedback ? `<div class="muted" style="font-size:14px;margin-top:4px">Your reason: “${esc(s.feedback)}”</div>` : ''}<button class="btn btn-quiet" onclick="U.sh={open:'${s.shiftId}',mode:''};render()">Change my answer</button>`;
-    return `<div class="sitem"><div class="row"><b>${dayLbl(s.date)} · ${s.start}–${s.end}</b>${stTag(s.status)}</div><div class="muted" style="font-size:14px">${esc(s.store)} · ${s.hours} h${s.note ? ' · ' + esc(s.note) : ''}</div>${body}<div class="note bad hide" id="e-${s.shiftId}"></div></div>`;
+    const when = s.type === 'WEEKOFF' ? 'Week off (paid)' : s.type === 'LEAVE' ? 'Leave (unpaid)' : s.start + '–' + s.end;
+    const sub = s.type === 'WEEKOFF' || s.type === 'LEAVE' ? esc(s.store) : esc(s.store) + ' · ' + s.hours + ' h';
+    return `<div class="sitem"><div class="row"><b>${dayLbl(s.date)} · ${when}</b>${stTag(s.status)}</div><div class="muted" style="font-size:14px">${sub}${s.note ? ' · ' + esc(s.note) : ''}</div>${body}<div class="note bad hide" id="e-${s.shiftId}"></div></div>`;
   }).join('') || '<p class="muted">No shifts planned for you yet. Your manager will add them here.</p>'}</div>`;
 }
 async function answer(id, ans) {

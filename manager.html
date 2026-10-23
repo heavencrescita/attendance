@@ -534,7 +534,8 @@ function renderWeek() {
     html += `<div class="day ${past ? 'past' : ''}"><h3><span>${dLabel(day)}${day === today ? ' · today' : ''}</span>${past ? '' : `<a onclick="editShift(null,'${day}')">+ Add shift</a>`}</h3>`;
     html += items.map(s => {
       const [lab, cls] = STATUS[s.status] || [s.status, 't-mute'];
-      return `<div class="sh"><div class="who"><b>${esc(s.name)}</b><small>${s.start}–${s.end} · ${s.hours} h${s.note ? ' · ' + esc(s.note) : ''}</small>${s.status === 'REJECTED' && s.feedback ? `<span class="fb">“${esc(s.feedback)}”</span>` : ''}</div>
+      const when = s.type === 'WEEKOFF' ? '<span class="tag t-ok">Week off (paid)</span>' : s.type === 'LEAVE' ? '<span class="tag t-mute">Leave (unpaid)</span>' : `${s.start}–${s.end} · ${s.hours} h`;
+      return `<div class="sh"><div class="who"><b>${esc(s.name)}</b><small>${when}${s.note ? ' · ' + esc(s.note) : ''}</small>${s.status === 'REJECTED' && s.feedback ? `<span class="fb">“${esc(s.feedback)}”</span>` : ''}</div>
         <div class="acts"><span class="tag ${cls}">${lab}</span>${past ? '' : `<a onclick="editShift('${s.shiftId}')">Edit</a><a onclick="cancelShift('${s.shiftId}')">Remove</a>`}</div></div>`;
     }).join('') || (past ? '' : '<div class="muted" style="font-size:13px;padding:2px 0 6px">No shifts</div>');
     html += '</div>';
@@ -554,7 +555,7 @@ function sendWa(empId) {
   const st = M.planStores.find(s => s.code === $('p-store').value);
   const s = weekShifts().filter(x => x.empId === empId && x.date >= P.data.today && x.status !== 'REJECTED').sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const first = s[0].name.split(' ')[0];
-  const txt = `Hi ${first}, your BWC shifts at ${st.name}:\n` + s.map(x => `• ${dLabel(x.date)}  ${x.start}–${x.end}`).join('\n') +
+  const txt = `Hi ${first}, your BWC shifts at ${st.name}:\n` + s.map(x => `• ${dLabel(x.date)}  ${x.type === 'WEEKOFF' ? 'Week off (paid)' : x.type === 'LEAVE' ? 'Leave (unpaid)' : x.start + '–' + x.end}`).join('\n') +
     `\n\nPlease Accept or Reject each shift in the BWC app (WAFF number + PIN):\nhttps://heavencrescita.github.io/attendance/\nBWC செயலியில் ஏற்கவும் / மறுக்கவும்.\n— ${M.name}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
   api({ action: 'planNotify', id: M.id, pin: M.pin, shiftIds: s.map(x => x.shiftId) }).then(() => { s.forEach(x => x.notifiedAt = 'now'); renderWa(weekShifts()); }).catch(() => {});
@@ -567,12 +568,18 @@ function editShift(shiftId, day) {
   const here = emps.filter(e => e.branch === st), other = emps.filter(e => e.branch !== st);
   const last = JSON.parse(localStorageGet('bwcLastTimes') || '{"start":"09:00","end":"18:00"}');
   const days = []; for (let i = 0; i < 7; i++) { const d = addD(P.from, i); if (d >= P.data.today) days.push(d); }
+  const type = s ? (s.type || 'WORK') : 'WORK';
   const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'ov';
   ov.innerHTML = `<div class="sheet"><h2>${s ? 'Edit shift' : 'Add shift'}</h2>
     <label>Employee</label><select id="f-emp" onchange="clashCheck()"><option value="">Choose…</option><optgroup label="This store">${here.map(opt).join('')}</optgroup><optgroup label="Other stores">${other.map(e => opt(e).replace('</option>', ' · ' + esc(e.branchName) + '</option>')).join('')}</optgroup></select>
-    <div class="two"><div><label>Start</label><input class="sm" id="f-start" type="time" value="${s ? s.start : last.start}" onchange="clashCheck()"></div><div><label>End</label><input class="sm" id="f-end" type="time" value="${s ? s.end : last.end}" onchange="clashCheck()"></div></div>
+    <label>Type</label><select id="f-type" onchange="toggleShiftType();clashCheck()">
+      <option value="WORK" ${type === 'WORK' ? 'selected' : ''}>Work shift</option>
+      <option value="WEEKOFF" ${type === 'WEEKOFF' ? 'selected' : ''}>Week off (paid)</option>
+      <option value="LEAVE" ${type === 'LEAVE' ? 'selected' : ''}>Leave (unpaid)</option>
+    </select>
+    <div id="f-times" class="two" style="${type === 'WORK' ? '' : 'display:none'}"><div><label>Start</label><input class="sm" id="f-start" type="time" value="${s ? s.start : last.start}" onchange="clashCheck()"></div><div><label>End</label><input class="sm" id="f-end" type="time" value="${s ? s.end : last.end}" onchange="clashCheck()"></div></div>
     <div class="muted" id="f-dur" style="font-size:13px;margin-top:6px"></div>
-    <label>${s ? 'Day' : 'Days <span>tap every day this person works this week</span>'}</label>
+    <label>${s ? 'Day' : 'Days <span>tap every day this applies</span>'}</label>
     <div class="dchk">${(s ? [day] : days).map(d => `<label class="${d === day ? 'on' : ''}"><input type="checkbox" value="${d}" ${d === day ? 'checked' : ''} ${s ? 'disabled' : ''} onchange="this.parentNode.classList.toggle('on',this.checked);clashCheck()">${DN[dObj(d).getDay()]}<br>${dObj(d).getDate()}</label>`).join('')}</div>
     <label>Note <span>optional — e.g. opening duty, stock count</span></label><input class="sm" id="f-note" maxlength="200" value="${s ? esc(s.note) : ''}">
     <div id="f-warn"></div>
@@ -582,38 +589,44 @@ function editShift(shiftId, day) {
     <button class="g" onclick="document.getElementById('ov').remove()">Cancel</button></div>`;
   document.body.appendChild(ov); clashCheck();
 }
+function toggleShiftType() { $('f-times').style.display = $('f-type').value === 'WORK' ? '' : 'none'; $('f-dur').textContent = ''; }
 function localStorageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 const mins = t => { const m = /^(\d\d):(\d\d)$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
 function spanOf(day, a, b) { const base = Math.round(dObj(day).getTime() / 60000) - 720; const dur = b > a ? b - a : b + 1440 - a; return [base + a, base + a + dur]; }
 function clashCheck() {
-  const a = mins($('f-start').value), b = mins($('f-end').value);
+  const type = $('f-type') ? $('f-type').value : 'WORK';
+  const allDay = type !== 'WORK';
+  const a = allDay ? 0 : mins($('f-start').value), b = allDay ? 1440 : mins($('f-end').value);
   const dur = a === null || b === null ? null : (b > a ? b - a : b + 1440 - a) / 60;
-  $('f-dur').textContent = dur === null ? '' : dur.toFixed(2).replace(/\.?0+$/, '') + ' hours' + (b <= a ? ' · ends next morning' : '') + (dur < 1 || dur > 16 ? ' — must be 1 to 16 hours' : '');
+  $('f-dur').textContent = allDay ? '' : dur === null ? '' : dur.toFixed(2).replace(/\.?0+$/, '') + ' hours' + (b <= a ? ' · ends next morning' : '') + (dur < 1 || dur > 16 ? ' — must be 1 to 16 hours' : '');
   const emp = $('f-emp').value; const box = $('f-warn'); box.innerHTML = '';
   if (!emp || dur === null) return;
   const days = [...document.querySelectorAll('.dchk input')].filter(x => x.checked).map(x => x.value);
   const editing = (document.getElementById('f-save').getAttribute('onclick').match(/'([^']*)'/) || [])[1];
-  const others = P.data.shifts.filter(s => s.empId === emp && s.shiftId !== editing && s.status !== 'REJECTED').map(s => ({ d: s.date, s: s.start, e: s.end, w: 'here' }))
-    .concat(P.data.busy.filter(s => s.empId === emp).map(s => ({ d: s.date, s: s.start, e: s.end, w: s.store })));
+  const others = P.data.shifts.filter(s => s.empId === emp && s.shiftId !== editing && s.status !== 'REJECTED').map(s => ({ d: s.date, type: s.type, s: s.start, e: s.end, w: 'here' }))
+    .concat(P.data.busy.filter(s => s.empId === emp).map(s => ({ d: s.date, type: s.type, s: s.start, e: s.end, w: s.store })));
+  const label = o => o.type === 'WEEKOFF' ? 'week off' : o.type === 'LEAVE' ? 'leave' : o.s + '–' + o.e;
   const msgs = [];
-  days.forEach(d => { const sp = spanOf(d, a, b); others.forEach(o => { const op = spanOf(o.d, mins(o.s), mins(o.e)); if (sp[0] < op[1] && op[0] < sp[1]) msgs.push(`${dLabel(o.d)} ${o.s}–${o.e}${o.w === 'here' ? '' : ' at ' + o.w}`); }); });
-  if (msgs.length) box.innerHTML = `<div class="warn">Already working: ${esc(msgs.join(', '))}. Change the time or day.</div>`;
+  days.forEach(d => { const sp = spanOf(d, a, b); others.forEach(o => { const oAllDay = o.type === 'WEEKOFF' || o.type === 'LEAVE'; const op = oAllDay ? spanOf(o.d, 0, 1440) : spanOf(o.d, mins(o.s), mins(o.e)); if (sp[0] < op[1] && op[0] < sp[1]) msgs.push(`${dLabel(o.d)} ${label(o)}${o.w === 'here' ? '' : ' at ' + o.w}`); }); });
+  if (msgs.length) box.innerHTML = `<div class="warn">Already ${allDay ? 'has' : 'working'}: ${esc(msgs.join(', '))}. Change the ${allDay ? 'day' : 'time or day'}.</div>`;
 }
 async function saveShift(shiftId) {
-  err('e-f'); const emp = $('f-emp').value, start = $('f-start').value, end = $('f-end').value, note = $('f-note').value.trim();
+  err('e-f'); const emp = $('f-emp').value, type = $('f-type').value, note = $('f-note').value.trim();
+  const start = type === 'WORK' ? $('f-start').value : '', end = type === 'WORK' ? $('f-end').value : '';
   const days = [...document.querySelectorAll('.dchk input')].filter(x => x.checked).map(x => x.value);
-  if (!emp) return err('e-f', 'Choose the employee'); if (!start || !end) return err('e-f', 'Enter start and end time'); if (!days.length) return err('e-f', 'Tick at least one day');
+  if (!emp) return err('e-f', 'Choose the employee'); if (type === 'WORK' && (!start || !end)) return err('e-f', 'Enter start and end time'); if (!days.length) return err('e-f', 'Tick at least one day');
   const store = $('p-store').value; $('f-save').disabled = true;
   try {
-    await api({ action: 'planSave', id: M.id, pin: M.pin, shifts: days.map(date => ({ shiftId: shiftId || undefined, store, empId: emp, date, start, end, note })) });
-    localStorageSet('bwcLastTimes', JSON.stringify({ start, end }));
+    await api({ action: 'planSave', id: M.id, pin: M.pin, shifts: days.map(date => ({ shiftId: shiftId || undefined, store, empId: emp, date, type, start, end, note })) });
+    if (type === 'WORK') localStorageSet('bwcLastTimes', JSON.stringify({ start, end }));
     $('ov').remove(); loadWeek();
   } catch (e) { err('e-f', e.message); $('f-save').disabled = false; }
 }
 async function cancelShift(id) {
   const s = P.data.shifts.find(x => x.shiftId === id);
-  if (!confirm(`Remove ${s.name}'s shift on ${dLabel(s.date)} ${s.start}–${s.end}?`)) return;
+  const when = s.type === 'WEEKOFF' ? 'week off' : s.type === 'LEAVE' ? 'leave' : s.start + '–' + s.end;
+  if (!confirm(`Remove ${s.name}'s ${when} on ${dLabel(s.date)}?`)) return;
   try { await api({ action: 'planCancel', id: M.id, pin: M.pin, shiftId: id }); loadWeek(); } catch (e) { err('e-plan', e.message); }
 }
 function logout() { stopAll(); M = {}; $('wid').value = ''; $('pin').value = ''; show('s-login'); }
