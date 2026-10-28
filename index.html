@@ -128,6 +128,8 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line
 const Live = (() => {
   const VISION = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
   const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const FACEAPI = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
+  const FACEAPI_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model';
   const VIRTUAL = /virtual|obs|manycam|droidcam|snap camera|epoccam|iriun|xsplit|splitcam|camtwist|ivcam|e2esoft/i;
   const TEXT = {
     BLINK: ['Blink your eyes', 'கண்களை சிமிட்டவும்'],
@@ -136,6 +138,34 @@ const Live = (() => {
     TURN_HEAD: ['Turn your head to one side', 'தலையை ஒரு பக்கம் திருப்பவும்']
   };
   let landmarker = null, loading = null;
+  let faceApiLoading = null;
+
+  // face-api.js (TinyFaceDetector + 68-point landmarks + 128-d recognition descriptor) — a separate model
+  // from the MediaPipe one above: that one proves liveness (gestures), this one proves *identity* (whose face).
+  async function loadFaceId() {
+    if (window.faceapi && faceApiLoading) return faceApiLoading;
+    if (!faceApiLoading) faceApiLoading = (async () => {
+      if (!window.faceapi) await new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = FACEAPI; s.onload = res; s.onerror = () => rej(new Error('Could not load face-id model'));
+        document.head.appendChild(s);
+      });
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELS),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACEAPI_MODELS),
+        faceapi.nets.faceRecognitionNet.loadFromUri(FACEAPI_MODELS)
+      ]);
+      return true;
+    })().catch(e => { faceApiLoading = null; throw e; });
+    return faceApiLoading;
+  }
+  // Returns a 128-float descriptor array for the single face in `video` right now, or null if 0 or >1 faces.
+  async function descriptor(video) {
+    await loadFaceId();
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+    const res = await faceapi.detectAllFaces(video, opts).withFaceLandmarks(true).withFaceDescriptors();
+    if (res.length !== 1) return null;
+    return Array.from(res[0].descriptor);
+  }
 
   async function load() {
     if (landmarker) return landmarker;
@@ -242,7 +272,7 @@ const Live = (() => {
     let d = 0; for (let j = 0; j < a.length; j += 4) d += Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]);
     return 1 - d / (a.length / 4 * 3 * 255);
   }
-  return { load, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
+  return { load, loadFaceId, descriptor, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
 })();
 
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
@@ -327,7 +357,7 @@ async function login() {
         (S.missed.count > 1 ? ` (${S.missed.count} shifts are waiting on this.)` : '') + ` Report it and Sarah will add the OUT time.`;
       $('missedLink').classList.remove('hide'); $('missedForm').classList.add('hide'); $('m-out').value = ''; $('m-why').value = ''; err('e-missed');
     }
-    show('s-punch'); startGps(); startCam(); Live.load().catch(() => {});   // start downloading the face model early
+    show('s-punch'); startGps(); startCam(); Live.load().catch(() => {}); Live.loadFaceId().catch(() => {});   // start downloading the face models early
     loadShifts();
   } catch (e) { err('e-login', e.message); }
   finally { $('b-login').disabled = false; }
@@ -368,7 +398,7 @@ async function startCheck() {
   let live;
   try {
     live = await Live.challenge($('video'), S.ch.steps, ui());
-  } catch (e) {   // face model could not load (very old phone / no network to the model) — punch is saved but flagged
+  } catch (e) {   // face model could not load (very old phone / no network to the model) — server will refuse this punch outright
     live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam ? cam.label : '' };
   }
   $('prompt').style.display = 'none';
@@ -376,12 +406,24 @@ async function startCheck() {
     $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
     return err('e-punch', (live.error || 'The actions were not detected. Keep only your face in the oval, in good light, and do each action clearly.') + ' · மீண்டும் முயற்சிக்கவும்');
   }
+  let faceDescriptor = null;
+  if (live.method === 'facemesh' && live.passed) {
+    $('b-punch').innerHTML = 'Checking it’s you… <small>முக அடையாளச் சரிபார்ப்பு</small>';
+    for (let i = 0; i < 5 && !faceDescriptor; i++) {
+      faceDescriptor = await Live.descriptor($('video')).catch(() => null);
+      if (!faceDescriptor) await new Promise(r => setTimeout(r, 200));
+    }
+    if (!faceDescriptor) {
+      $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
+      return err('e-punch', 'Could not get a clear face match — keep only your face in the oval, in good light · மீண்டும் முயற்சிக்கவும்');
+    }
+  }
   const selfie = live.strip || Live.jpeg(Live.grab($('video'), 480, true), 0.72);
   delete live.strip;
   $('b-punch').innerHTML = 'Saving… <small>சேமிக்கப்படுகிறது</small>';
   const best = S.best; stopDevices();
   try {
-    const r = await api({ action: 'punch', id: S.id, pin: S.pin, nonce: S.ch.nonce, liveness: live, selfie,
+    const r = await api({ action: 'punch', id: S.id, pin: S.pin, nonce: S.ch.nonce, liveness: live, selfie, faceDescriptor,
       lat: best ? best.lat : null, lng: best ? best.lng : null, acc: best ? best.accuracy : null, gpsError: S.gpsError, ua: navigator.userAgent });
     showResult(r);
   } catch (e) {

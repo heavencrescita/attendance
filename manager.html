@@ -193,6 +193,8 @@ select,textarea,input.sm{width:100%;font-size:16px;padding:11px 12px;border:2px 
 const Live = (() => {
   const VISION = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
   const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const FACEAPI = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js';
+  const FACEAPI_MODELS = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model';
   const VIRTUAL = /virtual|obs|manycam|droidcam|snap camera|epoccam|iriun|xsplit|splitcam|camtwist|ivcam|e2esoft/i;
   const TEXT = {
     BLINK: ['Blink your eyes', 'கண்களை சிமிட்டவும்'],
@@ -201,6 +203,34 @@ const Live = (() => {
     TURN_HEAD: ['Turn your head to one side', 'தலையை ஒரு பக்கம் திருப்பவும்']
   };
   let landmarker = null, loading = null;
+  let faceApiLoading = null;
+
+  // face-api.js (TinyFaceDetector + 68-point landmarks + 128-d recognition descriptor) — a separate model
+  // from the MediaPipe one above: that one proves liveness (gestures), this one proves *identity* (whose face).
+  async function loadFaceId() {
+    if (window.faceapi && faceApiLoading) return faceApiLoading;
+    if (!faceApiLoading) faceApiLoading = (async () => {
+      if (!window.faceapi) await new Promise((res, rej) => {
+        const s = document.createElement('script'); s.src = FACEAPI; s.onload = res; s.onerror = () => rej(new Error('Could not load face-id model'));
+        document.head.appendChild(s);
+      });
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(FACEAPI_MODELS),
+        faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACEAPI_MODELS),
+        faceapi.nets.faceRecognitionNet.loadFromUri(FACEAPI_MODELS)
+      ]);
+      return true;
+    })().catch(e => { faceApiLoading = null; throw e; });
+    return faceApiLoading;
+  }
+  // Returns a 128-float descriptor array for the single face in `video` right now, or null if 0 or >1 faces.
+  async function descriptor(video) {
+    await loadFaceId();
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+    const res = await faceapi.detectAllFaces(video, opts).withFaceLandmarks(true).withFaceDescriptors();
+    if (res.length !== 1) return null;
+    return Array.from(res[0].descriptor);
+  }
 
   async function load() {
     if (landmarker) return landmarker;
@@ -307,7 +337,7 @@ const Live = (() => {
     let d = 0; for (let j = 0; j < a.length; j += 4) d += Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]);
     return 1 - d / (a.length / 4 * 3 * 255);
   }
-  return { load, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
+  return { load, loadFaceId, descriptor, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
 })();
 
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
