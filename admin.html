@@ -919,9 +919,9 @@ function editEmp(id) {
       <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
     </div>
     ${id ? `<div style="margin-top:12px"><b>Face ID for punch check</b>
-      <div class="row" style="margin-top:4px">${e.faceDescriptor ? `<span class="tag t-ok">Enrolled${e.faceEnrolledAt ? ' · ' + esc(String(e.faceEnrolledAt).slice(0, 10)) : ''}</span>` : '<span class="tag t-bad">Not enrolled — punches are flagged for review until enrolled</span>'}
+      <div class="row" style="margin-top:4px">${e.faceDescriptor ? `<span class="tag t-ok">Enrolled${e.faceEnrolledAt ? ' · ' + esc(String(e.faceEnrolledAt).slice(0, 10)) : ''}${String(e.faceEnrolledBy || '').indexOf('(self') >= 0 ? ' · self, first punch' : ''}</span>` : '<span class="tag t-bad">Not enrolled yet — their first punch will auto-enroll it and show up flagged for your review</span>'}
       <button class="btn" onclick="enrollFaceDialog('${id}')">${e.faceDescriptor ? 'Re-enroll' : 'Enroll'} face photo</button></div>
-      <p class="muted" style="margin-top:4px">Every future punch is checked against this photo; a different face is refused, not just flagged.</p></div>` : ''}
+      <p class="muted" style="margin-top:4px">Every future punch is checked against this photo; a different face is refused, not just flagged. If a self-enrolled photo turns out to be the wrong person, re-enroll here to replace it.</p></div>` : ''}
     <div style="margin-top:12px"><b>Plans shifts for</b> <span class="muted">(managers only — needs “Can punch at any store” = Yes)</span>
       <div class="chips" id="f_mgr">${D.stores.filter(s => s.active === 'Yes').map(s => { const on = String(e.mgrStores || '').split(',').includes(s.code); return `<label class="chip"><input type="checkbox" value="${s.code}" ${on ? 'checked' : ''}> ${esc(s.name)}</label>`; }).join('')}</div></div><p class="muted">Every change is written to the Audit sheet (who, when, old → new).</p>
     <button class="btn y" onclick="saveEmp(${id ? 'false' : 'true'})">Save</button>`);
