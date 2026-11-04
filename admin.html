@@ -1278,9 +1278,25 @@ function reqs() {
     ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
   ${(D.role === 'admin' || D.role === 'hr') ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
     <p class="muted" style="margin-top:-6px">WAFF-901 “Test Employee” works in My BWC and on the punch screen like a real employee, but WAFF-900 to WAFF-999 never count in payroll, the dashboard, exports or the shift planner. Resetting wipes its punches, shifts and requests and loads fresh sample data for this month.</p>
-    <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>` : ''}`;
+    <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>
+  <div class="card" style="margin-top:14px"><h2>Face re-enrollment cleanup</h2>
+    <p class="muted" style="margin-top:-6px">Before today, an employee's first punch auto-saved whatever face the camera happened to see — no steady-frame or quality check. Anyone enrolled that way (tag: “self, first punch”) may now be failing the match check on every punch with a face that just doesn't agree with its own bad reference. This clears those references only — never a photo a manager captured through “Enroll face photo” — so the employee simply self-enrolls again on their next punch, this time through the new quality-gated capture. No camera, no admin visit needed per person.</p>
+    <button class="btn" onclick="checkBadFace()">Check how many are affected</button> <span id="bfOut" class="muted"></span>
+    <div id="bfList"></div></div>` : ''}`;
 }
 async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
+async function checkBadFace() {
+  const r = await api({ action: 'clearBadFaceEnrollments', apply: false });
+  if (!r.count) { $('#bfOut').textContent = 'None found — every stored face reference looks supervised.'; $('#bfList').innerHTML = ''; return; }
+  $('#bfOut').textContent = `${r.count} employee${r.count === 1 ? '' : 's'} self-enrolled before the quality gate shipped.`;
+  $('#bfList').innerHTML = `<ul style="margin:8px 0 10px 18px">${r.employees.map(e => `<li>${e.id} — ${esc(e.name)} <span class="muted">(enrolled ${String(e.enrolledAt).slice(0, 10)})</span></li>`).join('')}</ul>
+    <button class="btn r" onclick="applyClearBadFace(${r.count})">Clear all ${r.count} and require re-enrollment</button>`;
+}
+async function applyClearBadFace(n) {
+  if (!confirm(`Clear the stored face photo for ${n} employee(s)? They'll self-enroll again on their next punch. This can't be undone, but re-enrollment takes seconds.`)) return;
+  const r = await act({ action: 'clearBadFaceEnrollments', apply: true }, 'Cleared — affected employees will self-enroll on next punch');
+  $('#bfOut').textContent = `Cleared ${r.count} employee(s).`; $('#bfList').innerHTML = '';
+}
 async function decide(id, decision) { await act({ action: 'reviewRequest', requestId: id, decision, note: ($('#rn-' + id) || {}).value || '' }, decision === 'APPROVE' ? 'Approved' : 'Rejected'); }
 
 function users() {
