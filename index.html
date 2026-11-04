@@ -166,6 +166,51 @@ const Live = (() => {
     if (res.length !== 1) return null;
     return Array.from(res[0].descriptor);
   }
+  function euclid(a, b) { let s = 0; for (let k = 0; k < a.length; k++) { const d = a[k] - b[k]; s += d * d; } return Math.sqrt(s); }
+  // Self-enrollment capture: this becomes the ONE reference photo every future punch is checked against, so
+  // it holds itself to a much higher bar than ordinary verification — a manager isn't there to frame the shot.
+  //  1) wait for a held-still, centred, frontal, neutral face (reusing the MediaPipe mesh already loaded for
+  //     the gesture challenge) rather than whatever the camera happens to show right after the last gesture;
+  //  2) three face-api samples ~280ms apart, each re-checked for detector confidence and a sane face size;
+  //  3) the three must agree closely with each other (rejects a blurry/transitional/mid-blink frame) — the
+  //     template saved is their average, which is more stable than any single shot.
+  // Retries the whole sequence a few times with on-screen feedback before giving up; never throws — on
+  // failure the punch still goes through unenrolled (flagged for review) and tries again next time.
+  async function enrollCapture(video, ui) {
+    await Promise.all([load(), loadFaceId()]);
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.6 });
+    const frame = () => new Promise(r => requestAnimationFrame(() => {
+      const ts = performance.now();
+      try { r(scores(landmarker.detectForVideo(video, ts))); } catch (e) { r(null); }
+    }));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (ui && ui.prompt) ui.prompt('Hold still, look straight at the camera', 'அசையாமல் நேராகக் கேமராவைப் பாருங்கள்', 0);
+      const t0 = Date.now(); let steady = 0;
+      while (Date.now() - t0 < 6000) {
+        const s = await frame(); if (!s) continue;
+        if (ui && ui.face) ui.face(s.faces);
+        const good = s.faces === 1 && s.size > 0.2 && s.size < 0.5 && s.blink < 0.25 && s.yaw < 0.08 && s.smile < 0.3 && s.jaw < 0.15;
+        steady = good ? steady + 1 : 0;
+        if (steady >= 4) break;   // ~4 consecutive good frames ≈ held still, not just passing through neutral
+      }
+      if (steady < 4) continue;   // never settled this attempt — try again rather than accept a shaky capture
+      const samples = []; let bad = false;
+      for (let i = 0; i < 3 && !bad; i++) {
+        let res; try { res = await faceapi.detectAllFaces(video, opts).withFaceLandmarks(true).withFaceDescriptors(); } catch (e) { res = []; }
+        if (res.length !== 1 || res[0].detection.score < 0.7) { bad = true; break; }
+        const rel = res[0].detection.box.width / video.videoWidth;
+        if (rel < 0.18 || rel > 0.65) { bad = true; break; }
+        samples.push(Array.from(res[0].descriptor));
+        if (i < 2) await new Promise(r => setTimeout(r, 280));
+      }
+      if (bad || samples.length !== 3) continue;
+      const spread = Math.max(euclid(samples[0], samples[1]), euclid(samples[0], samples[2]), euclid(samples[1], samples[2]));
+      if (spread > 0.3) continue;   // samples disagree too much — face/lighting moved mid-capture, redo
+      const mean = samples[0].map((_, k) => (samples[0][k] + samples[1][k] + samples[2][k]) / 3);
+      return { ok: true, descriptor: mean, quality: { spread: +spread.toFixed(3), attempt: attempt + 1 } };
+    }
+    return { ok: false };
+  }
 
   async function load() {
     if (landmarker) return landmarker;
@@ -272,7 +317,7 @@ const Live = (() => {
     let d = 0; for (let j = 0; j < a.length; j += 4) d += Math.abs(a[j] - b[j]) + Math.abs(a[j + 1] - b[j + 1]) + Math.abs(a[j + 2] - b[j + 2]);
     return 1 - d / (a.length / 4 * 3 * 255);
   }
-  return { load, loadFaceId, descriptor, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
+  return { load, loadFaceId, descriptor, enrollCapture, openCamera, stop, challenge, capturePhoto, similarity, grab, jpeg, TEXT, VIRTUAL };
 })();
 
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
@@ -345,7 +390,7 @@ async function login() {
   $('b-login').disabled = true;
   try {
     const st = await api({ action: 'staffStatus', id, pin });
-    S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '', missed: st.missedPunch || null };
+    S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '', missed: st.missedPunch || null, hasFace: !!st.hasFace };
     $('hello').textContent = 'Hi ' + st.name.split(' ')[0] + ' 👋';
     $('state').innerHTML = st.next === 'OUT'
       ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>`
@@ -407,7 +452,8 @@ async function startCheck() {
     return err('e-punch', (live.error || 'The actions were not detected. Keep only your face in the oval, in good light, and do each action clearly.') + ' · மீண்டும் முயற்சிக்கவும்');
   }
   let faceDescriptor = null;
-  if (live.method === 'facemesh' && live.passed) {
+  if (live.method === 'facemesh' && live.passed && S.hasFace) {
+    // Already has a reference photo on file — fast single-shot capture for matching, as before.
     $('b-punch').innerHTML = 'Checking it’s you… <small>முக அடையாளச் சரிபார்ப்பு</small>';
     for (let i = 0; i < 5 && !faceDescriptor; i++) {
       faceDescriptor = await Live.descriptor($('video')).catch(() => null);
@@ -417,6 +463,14 @@ async function startCheck() {
       $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
       return err('e-punch', 'Could not get a clear face match — keep only your face in the oval, in good light · மீண்டும் முயற்சிக்கவும்');
     }
+  } else if (live.method === 'facemesh' && live.passed && !S.hasFace) {
+    // No reference photo yet — this capture becomes it, so hold it to a much higher bar (steady, frontal,
+    // confidence-checked, averaged over 3 samples). If it doesn't settle, don't block the punch over it —
+    // go through unenrolled and flagged for review; enrollment simply retries on the next punch.
+    $('b-punch').innerHTML = 'Setting up your face photo… <small>முக அடையாளம் பதிவு செய்யப்படுகிறது</small>';
+    const ec = await Live.enrollCapture($('video'), ui()).catch(() => ({ ok: false }));
+    $('prompt').style.display = 'none';
+    if (ec.ok) faceDescriptor = ec.descriptor;
   }
   const selfie = live.strip || Live.jpeg(Live.grab($('video'), 480, true), 0.72);
   delete live.strip;
