@@ -84,6 +84,7 @@ input.mini{width:58px;text-align:right;padding:3px 6px}
 @media print{.top,nav,.noprint{display:none!important}main{padding:0}.card{border:0}}
 @media(max-width:640px){main{padding:14px}.top{padding:10px 14px}nav{padding:0 6px}.kpi .v{font-size:22px}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -1024,7 +1025,7 @@ async function releasePay() {
 }
 async function withdrawRelease() { if (confirm(`Hide ${ST.D.monthLabel} payslips from staff again?`)) await act({ action: 'releaseMonth', month: ST.D.month, release: false }, 'Withdrawn'); }
 function pay() {
-  const D = ST.D, b = ST.branch;
+  const D = ST.D, b = ST.branch, isAdmin = D.role === 'admin' || D.role === 'hr';
   const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0 || (D.v9[x.e.id] && Number(D.v9[x.e.id].net))));
   const sum = k => R.reduce((s, x) => s + x.r[k], 0);
   const missing = D.issues.filter(i => i.kind === 'Missing OUT').length;
@@ -1041,7 +1042,7 @@ function pay() {
   <div class="card" style="margin-top:14px">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Payroll · ${esc(D.monthLabel)}</h2><div class="sp"></div>
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
-      <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button></div>
+      <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button>${isAdmin ? `<button class="btn" onclick="exportPayrollERP()" title="Full ERP-format payroll register, including bank details — admin/HR only">Download Payroll Sheet (.xlsx)</button>` : ''}</div>
     <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">OT</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th>${D.hasV9 ? '<th class="num">V9 NET</th>' : ''}<th>Notes</th></tr></thead><tbody>
     ${R.map(({ e, r, branchSplit: bs }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${bs && bs.length > 1 ? ` <span class="tag t-mute" title="${bs.map(a => branchName(a.branch) + ' ' + (a.frac * 100).toFixed(0) + '%').join(' · ')}">split</span>` : (bs && bs[0].branch !== e.branch ? ` <span class="tag t-warn" title="Roster says ${esc(branchName(e.branch))}; attendance this month is all at ${esc(branchName(bs[0].branch))}">moved?</span>` : '')}</td><td>${e.payType}</td>
       <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
@@ -1093,6 +1094,68 @@ function exportPayroll() {
   D.pay.forEach(({ e, r, branchSplit: bs }) => rows.push([e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty, r.days, r.workH.toFixed(2), r.creditDays, r.base.toFixed(2), r.otH.toFixed(2), r.otPay.toFixed(2), r.dedT, r.addT, r.net, r.payable, r.carry, D.v9[e.id] ? D.v9[e.id].net : '',
     bs ? bs.map(a => `${branchName(a.branch)} ${(a.frac * 100).toFixed(0)}%`).join(' / ') : '']));
   csv(rows, `BWC_Payroll_${D.month}.csv`);
+}
+// ERP-grade payroll register — mirrors the column layout/formulas of BWC_Payroll_<Mon>_FINAL.xlsx's
+// "<MON>-<YY> PAYROLL" sheet exactly (reverse-engineered from that workbook's cell formulas), computed
+// live from this month's own attendance/payroll data instead of being re-keyed from an import. admin/hr
+// only — includes each employee's bank account number and IFSC code unmasked.
+const ERP_HEAD = ['#', 'WAFF ID', 'Name', 'Branch', 'Pay Type', 'Status', 'Plan (₹)', 'Duty Hrs', 'Cal Days', 'Work Days', 'Days Worked', 'Hrs Worked', 'Std Hrs', 'Base Salary', 'OT Hrs', 'OT Pay',
+  'COMPLAINT', 'UNI/HYG/TRNG', 'DISCIPLINE', 'ADVANCE', 'T-SHIRT/EQUIP', 'CASH SHORT', 'Total Ded', 'Total Add', 'Gross', 'NET (₹)', 'Pay Group', 'Bank Account', 'IFSC', 'Pay Status', 'Remarks',
+  'WkOff Days', 'Daily Rate', 'Rate/Hr', 'Exp Hrs', 'Short Hrs', 'LOP Hrs', 'Wk Credit', 'Eff Hrs', 'W/O Eligible', 'NET Payable (₹)', 'Carry Fwd (₹)', 'Exception Flags', 'Actual Clocked Hrs', 'Pay Basis',
+  'Name on Account', 'Deduction Detail', 'Addition Detail'];
+function erpRow(e, r, idx) {
+  const r2 = n => Math.round(Number(n) * 100) / 100;
+  const payBasis = e.payType === 'FIXED' ? 'FIXED' : 'ACTUAL';
+  const expH = r.workDays * e.duty;          // workdays this employee should be on duty × shift length
+  const stdH = r.calDays * e.duty;           // full calendar-days standard, before any attendance is applied
+  // "Hrs Worked" mirrors the ERP sheet's own branch logic: HOURLY counts clocked+week-off-credit hours in
+  // full; FIXED is capped at what the roster says they owed (days × duty) plus the same week-off credit.
+  const hrsWorked = payBasis === 'ACTUAL' ? r.workH + r.creditH : Math.min(r.workH, r.days * e.duty) + r.creditH;
+  const shortH = Math.max(0, expH - hrsWorked);
+  const lopH = Math.trunc(shortH);
+  const effH = payBasis === 'ACTUAL' ? hrsWorked : (r.days >= r.workDays ? (expH - lopH + r.creditH) : (hrsWorked + r.creditH));
+  // No "payment group" field exists on the employee record — derived from whether a bank account is on file.
+  const payGroup = e.bankAcct ? 'NEFT' : 'CASH';
+  const payStatus = e.status === 'Inactive' ? (r.days > 0 ? '⚠ INACTIVE+ATT' : '— INACTIVE')
+    : r.net < 0 ? '❌ NEGATIVE NET' : (!e.bankAcct ? '💵 CASH PAYMENT' : '✅ TRANSFER READY');
+  const remarks = (e.status === 'Inactive' && r.days > 0) ? 'Inactive employee with attendance — HR approval needed'
+    : r.net < 0 ? 'Negative net — review deductions'
+    : !e.bankAcct ? 'Missing bank account'
+    : !e.ifsc ? 'Missing IFSC — verify before transfer' : '';
+  const flags = [];
+  if (r.net < 0) flags.push('NEGATIVE-NET');
+  if (e.status === 'Inactive' && r.days > 0) flags.push('INACTIVE+ATT');
+  if (e.status === 'Active' && r.days === 0) flags.push('ACTIVE-NOPAY');
+  if (e.status !== 'Inactive' && !e.bankAcct) flags.push('NO-BANK');
+  if (e.status !== 'Inactive' && e.bankAcct && !e.ifsc) flags.push('NO-IFSC');
+  const dc = cat => r.ded.filter(d => d.category === cat).reduce((s, d) => s + Number(d.amount), 0);
+  // Every deduction/addition this employee has, by category — including categories (e.g. OTHER) the ERP
+  // sheet's fixed columns don't break out, so Total Ded/Add here always reconciles to this detail in full.
+  const dedDetail = r.ded.map(d => `${d.category}: ₹${d.amount}${d.note ? ' (' + d.note + ')' : ''}`).join(' | ');
+  const addDetail = r.add.map(d => `${d.category}: ₹${d.amount}${d.note ? ' (' + d.note + ')' : ''}`).join(' | ');
+  return [idx, e.id, e.name, branchName(e.branch), e.payType, e.status, e.plan, e.duty,
+    r.calDays, r.workDays, r.days, r2(hrsWorked), stdH,
+    r2(r.base), r2(r.otH), r2(r.otPay),
+    dc('COMPLAINT'), dc('UNI/HYG/TRNG'), dc('DISCIPLINE'), dc('ADVANCE'), dc('T-SHIRT/EQUIP'), dc('CASH SHORT'),
+    r2(r.dedT), r2(r.addT), r2(r.gross), r2(r.net),
+    payGroup, e.bankAcct || '', e.ifsc || '', payStatus, remarks,
+    r.creditDays, Number(e.dailyRate) || 0, r2(r.rate),
+    r2(expH), r2(shortH), lopH, r.creditH, r2(effH), e.woEligible === 'No' ? 'No' : 'Yes',
+    r2(r.payable), r2(r.carry), flags.join('; '), r2(r.workH), payBasis,
+    e.acctName || '', dedDetail, addDetail];
+}
+function exportPayrollERP() {
+  const D = ST.D;
+  if (typeof XLSX === 'undefined') return toast('Could not load the spreadsheet library — check your connection and try again', true);
+  const blank = Array(ERP_HEAD.length - 1).fill('');
+  const rows = [['HEAVEN CRESCITA — PAYROLL REGISTER', ...blank], [`Period: ${D.monthLabel}`, `Generated: ${new Date().toLocaleString('en-IN')}`, ...blank.slice(1)], ERP_HEAD];
+  D.pay.forEach(({ e, r }, i) => rows.push(erpRow(e, r, i + 1)));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: ERP_HEAD.length - 1 } }];
+  ws['!cols'] = ERP_HEAD.map(() => ({ wch: 14 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `${D.month} PAYROLL`.slice(0, 31));
+  XLSX.writeFile(wb, `BWC_Payroll_${D.month}_ERP.xlsx`);
 }
 
 /* ---------------- STORES (admin) ---------------- */
