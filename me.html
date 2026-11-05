@@ -578,8 +578,10 @@ function me() {
     <dl class="kv" style="margin-top:12px">${FIELDS.map(([k, l]) => `<dt>${l}</dt><dd>${v(k)}</dd>`).join('')}</dl>
     <p class="muted" style="font-size:13px;margin:12px 0 0">Changes go to your manager to approve. Bank changes are checked before your next salary.</p></div>
   ${R.length ? `<div class="panel"><h2>Your requests</h2>${R.map(r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {}
-      const what = r.kind === 'CORRECTION' ? `Punch correction for ${dayLbl(d.date)}, ${d.inT}–${d.outT}` : 'Update ' + Object.keys(d).map(k => (FIELDS.find(f => f[0] === k) || [k, k])[1].toLowerCase()).join(', ');
+      const what = r.kind === 'CORRECTION' ? `Punch correction for ${dayLbl(d.date)}, ${d.inT}–${d.outT}` : r.kind === 'FACE_RESET' ? 'Face photo reset' : r.kind === 'MISSED_PUNCHOUT' ? 'Missed punch-out' : r.kind === 'PETTY_CASH' ? 'Petty cash expense' : 'Update ' + Object.keys(d).map(k => (FIELDS.find(f => f[0] === k) || [k, k])[1].toLowerCase()).join(', ');
       return `<div class="req"><div class="sp">${esc(what)}<div class="muted" style="font-size:12.5px">${String(r.createdAt).slice(0, 10)}${r.decisionNote ? ' · ' + esc(r.decisionNote) : ''}</div></div>${r.status === 'PENDING' ? '<span class="tag t-warn">Waiting</span>' : r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Not approved</span>'}</div>`; }).join('')}</div>` : ''}
+  ${e.hasFace ? `<div class="panel"><h2>Face photo</h2><p class="lead">If punching in keeps saying your face doesn't match, your saved photo may be wrong — tell Sarah and she can reset it. You'll set a new one on your next punch.</p>
+    <button class="btn btn-ghost" onclick="faceSheet()">My face isn't matching</button></div>` : ''}
   <div class="panel"><h2>PIN and sign out</h2><p class="lead">Change the PIN you use to punch in and sign in here.</p>
     <div class="row"><button class="btn btn-ghost" onclick="pinSheet()">Change PIN</button><div class="sp"></div><button class="btn btn-quiet" onclick="signOut()">Sign out</button></div></div>`;
 }
@@ -613,6 +615,18 @@ async function sendFix() {
   const data = { date: $('c-date').value, inT: $('c-in').value, outT: $('c-out').value, reason: $('c-why').value.trim() };
   $('s-go').disabled = true;
   try { await api({ action: 'staffRequest', id: U.id, pin: U.pin, kind: 'CORRECTION', data }); sheetMsg('ok', 'Sent. Your manager will review it.'); setTimeout(async () => { closeSheet(); await load(U.D.month); }, 900); }
+  catch (e) { sheetMsg('bad', e.message); $('s-go').disabled = false; }
+}
+function faceSheet() {
+  openSheet(`<h3>My face isn't matching</h3><p class="muted" style="margin:0 0 6px">Sarah will check and reset your saved photo. You'll set a new one automatically the next time you punch in.</p><div class="fgrid">
+    <label for="fc-why">What happened?</label><textarea id="fc-why" rows="3" maxlength="300" placeholder="For example: it keeps saying my face doesn't match even though it's me"></textarea></div>
+    <div class="note hide" id="s-msg"></div>
+    <div class="ans"><button class="btn btn-ghost" onclick="closeSheet()">Cancel</button><button class="btn btn-syrup" id="s-go" onclick="sendFace()">Send to Sarah</button></div>`);
+}
+async function sendFace() {
+  const data = { reason: $('fc-why').value.trim() };
+  $('s-go').disabled = true;
+  try { await api({ action: 'staffRequest', id: U.id, pin: U.pin, kind: 'FACE_RESET', data }); sheetMsg('ok', 'Sent. Sarah will review it.'); setTimeout(async () => { closeSheet(); await load(U.D.month); }, 900); }
   catch (e) { sheetMsg('bad', e.message); $('s-go').disabled = false; }
 }
 function pinSheet() {
