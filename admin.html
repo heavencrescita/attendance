@@ -516,6 +516,9 @@ function derive() {
 }
 const branchName = c => (ST.D.storeName[c] || c);
 const ampm_ = hm => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hm || '').trim()); if (!m) return hm || ''; let h = +m[1]; const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ':' + m[2] + ' ' + ap; };
+// Short display formats used across the admin — dd-mm-yy for a bare date, dd-mm-yy hh:mm am/pm for a timestamp.
+const fmtD_ = ymd => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd || '')); return m ? `${m[3]}-${m[2]}-${m[1].slice(2)}` : (ymd || ''); };
+const fmtDT_ = iso => { const s = String(iso || ''); const d = fmtD_(s.slice(0, 10)), hm = ampm_(s.slice(11, 16)); return hm ? `${d} ${hm}` : d; };
 const LATE_GRACE_MIN = 10;
 // Planned vs actual (report only — pay is still calculated from punches)
 function derivePlan() {
@@ -529,13 +532,26 @@ function derivePlan() {
     const st = Date.parse(s.date + 'T' + s.start + ':00+05:30'), dur = Number(s.hours) * 3600000, en = st + dur;
     const cand = ins.filter(p => p.empId === s.empId && !used.has(p.punchId) && Number(p.epoch) > st - 4 * 3600000 && Number(p.epoch) < st + 8 * 3600000)
       .sort((a, b) => Math.abs(a.epoch - st) - Math.abs(b.epoch - st))[0];
-    let res, late = 0, out = '';
+    let res, late = 0, out = '', actualPunch = cand;
     if (cand) {
       used.add(cand.punchId); late = Math.round((Number(cand.epoch) - st) / 60000);
       res = late > LATE_GRACE_MIN ? 'Late' : 'On time';
       const sh = (D.byEmp[s.empId] || { shifts: [] }).shifts.find(x => x.inPunch && x.inPunch.punchId === cand.punchId); out = sh ? sh.out : '';
-    } else res = st > now ? 'Upcoming' : en > now ? 'Not in yet' : 'No-show';
-    return { s, st, inPunch: cand, late, out, res };
+    } else if (st > now) res = 'Upcoming';
+    else if (en > now) res = 'Not in yet';
+    else {
+      // Past the matching window (planned start −4h to +8h) and still no match — before calling it a flat
+      // no-show, check whether they punched IN *somewhere* that same calendar day (e.g. came in very late).
+      // Report what actually happened rather than leaving "Actual IN–OUT" blank when a punch does exist.
+      const wide = ins.filter(p => p.empId === s.empId && !used.has(p.punchId) && String(p.time).slice(0, 10) === s.date)
+        .sort((a, b) => Math.abs(a.epoch - st) - Math.abs(b.epoch - st))[0];
+      if (wide) {
+        used.add(wide.punchId); actualPunch = wide; late = Math.round((Number(wide.epoch) - st) / 60000);
+        res = 'Very late';
+        const sh = (D.byEmp[s.empId] || { shifts: [] }).shifts.find(x => x.inPunch && x.inPunch.punchId === wide.punchId); out = sh ? sh.out : '';
+      } else res = 'No-show';
+    }
+    return { s, st, inPunch: actualPunch, late, out, res };
   }).sort((a, b) => a.st - b.st);
   const dayOffRows = dayOff.map(s => ({ s, st: Date.parse(s.date + 'T00:00:00+05:30'), inPunch: null, late: 0, out: '', res: s.status === 'REJECTED' ? 'Rejected' : '' })).sort((a, b) => a.st - b.st);
   const planned = new Set(work.map(s => s.empId + '|' + s.date));
@@ -567,41 +583,49 @@ function branchCodes() { return [...new Set(ST.D.employees.map(e => e.branch))].
 
 /* ---------------- SHIFT PLAN ---------------- */
 function shiftPlan() {
-  const D = ST.D, b = ST.planStore || 'ALL', f = ST.planFilter || 'ALL';
+  const D = ST.D, b = ST.planStore || 'ALL', f = ST.planFilter || 'ALL', pe = ST.planEmp || 'ALL', pf = ST.planFrom || '', pt = ST.planTo || '';
   const inStore = r => b === 'ALL' || r.s.store === b;
-  const rows = D.plan.rows.filter(inStore);
+  const storeRows = D.plan.rows.filter(inStore);
+  const rows = storeRows.filter(r => (pe === 'ALL' || r.s.empId === pe) && (!pf || r.s.date >= pf) && (!pt || r.s.date <= pt));
   const cnt = k => rows.filter(k).length;
   const ack = { PENDING: ['Waiting', 't-warn'], ACCEPTED: ['Accepted', 't-ok'], REJECTED: ['Rejected', 't-bad'] };
-  const resTag = r => r.res === 'Late' ? `<span class="tag t-bad">Late ${r.late} min</span>` : r.res === 'No-show' ? '<span class="tag t-bad">No-show</span>' : r.res === 'On time' ? '<span class="tag t-ok">On time</span>' : `<span class="tag t-mute">${r.res}</span>`;
-  const filt = { ALL: () => true, REJECTED: r => r.s.status === 'REJECTED', PENDING: r => r.s.status === 'PENDING', LATE: r => r.res === 'Late', NOSHOW: r => r.res === 'No-show' }[f];
+  const resTag = r => r.res === 'Late' ? `<span class="tag t-bad">Late ${r.late} min</span>` : r.res === 'Very late' ? `<span class="tag t-warn">Very late (${(r.late / 60).toFixed(1)} h) — check</span>` : r.res === 'No-show' ? '<span class="tag t-bad">No-show</span>' : r.res === 'On time' ? '<span class="tag t-ok">On time</span>' : `<span class="tag t-mute">${r.res}</span>`;
+  const filt = { ALL: () => true, REJECTED: r => r.s.status === 'REJECTED', PENDING: r => r.s.status === 'PENDING', LATE: r => r.res === 'Late' || r.res === 'Very late', NOSHOW: r => r.res === 'No-show' }[f];
   const stores = [...new Set(D.plan.rows.map(r => r.s.store))].sort((x, y) => branchName(x).localeCompare(branchName(y)));
+  const planEmps = D.employees.filter(e => storeRows.some(r => r.s.empId === e.id)).sort((a, b2) => a.name.localeCompare(b2.name));
   const un = D.plan.unplanned.filter(p => b === 'ALL' || p.store === b);
   const mgrs = D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active');
   $('#main').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:10px"><h2 style="margin:0">Shift plan vs actual — ${esc(D.monthLabel)}</h2><div class="sp"></div>
       <div style="width:200px"><select onchange="ST.planStore=this.value;render()"><option value="ALL">All stores</option>${stores.map(c => `<option value="${c}" ${c === b ? 'selected' : ''}>${esc(branchName(c))}</option>`).join('')}</select></div></div>
-    <p class="muted">Managers plan shifts in the manager app; employees accept or reject them in the attendance app. This compares the plan with real punches — <b>pay is not affected</b>. Late = punched IN more than ${LATE_GRACE_MIN} min after the planned start.</p>
+    <p class="muted">Managers plan shifts in the manager app; employees accept or reject them in the attendance app. This compares the plan with real punches — <b>pay is not affected</b>. Late = punched IN more than ${LATE_GRACE_MIN} min after the planned start. Very late = no punch in the expected window, but they did punch in later that day.</p>
     <div class="grid kpis">
       <div class="card kpi"><div class="l">Planned shifts</div><div class="v">${rows.length}</div></div>
       <div class="card kpi"><div class="l">Accepted</div><div class="v">${cnt(r => r.s.status === 'ACCEPTED')}</div><div class="s">${cnt(r => r.s.status === 'PENDING')} waiting for reply</div></div>
       <div class="card kpi"><div class="l">Rejected</div><div class="v">${cnt(r => r.s.status === 'REJECTED')}</div></div>
-      <div class="card kpi"><div class="l">Late arrivals</div><div class="v">${cnt(r => r.res === 'Late')}</div></div>
+      <div class="card kpi"><div class="l">Late arrivals</div><div class="v">${cnt(r => r.res === 'Late' || r.res === 'Very late')}</div></div>
       <div class="card kpi"><div class="l">No-shows</div><div class="v">${cnt(r => r.res === 'No-show' && r.s.status !== 'REJECTED')}</div></div>
       <div class="card kpi"><div class="l">Worked without a plan</div><div class="v">${un.length}</div><div class="s">at stores that use planning</div></div>
     </div>
     ${D.plan.rows.length ? '' : `<div class="note">No shifts planned for this month yet. Assign stores to managers in <b>Assign managers to stores</b> below, then they plan from the manager app.</div>`}
-    <div class="row" style="gap:6px;margin:14px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
+    <div class="row" style="gap:8px;margin:14px 0 2px">
+      <div style="width:220px"><select onchange="ST.planEmp=this.value;render()"><option value="ALL" ${pe === 'ALL' ? 'selected' : ''}>All employees</option>${planEmps.map(e => `<option value="${e.id}" ${e.id === pe ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`).join('')}</select></div>
+      <label class="muted" style="font-size:12px">From<input type="date" style="width:auto;display:block" value="${pf}" onchange="ST.planFrom=this.value;render()"></label>
+      <label class="muted" style="font-size:12px">To<input type="date" style="width:auto;display:block" value="${pt}" onchange="ST.planTo=this.value;render()"></label>
+      ${pe !== 'ALL' || pf || pt ? `<button class="btn" onclick="ST.planEmp='ALL';ST.planFrom='';ST.planTo='';render()">Clear</button>` : ''}
+    </div>
+    <div class="row" style="gap:6px;margin:10px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
     <div class="scroll"><table><thead><tr><th>Date</th><th>Store</th><th>Employee</th><th>Planned</th><th>Reply</th><th>Actual IN–OUT</th><th>Result</th><th>Planned by</th></tr></thead><tbody>
     ${rows.filter(filt).map(r => { const [l, c] = ack[r.s.status] || [r.s.status, 't-mute'];
       const planned = r.s.type === 'WEEKOFF' ? '<span class="tag t-ok">Week off</span>' : r.s.type === 'LEAVE' ? '<span class="tag t-mute">Leave</span>' : `${ampm_(r.s.start)}–${ampm_(r.s.end)}`;
-      return `<tr><td>${esc(r.s.date)}</td><td>${esc(branchName(r.s.store))}</td><td><b>${esc(r.s.name)}</b> <span class="muted">${r.s.empId}</span></td><td>${planned}${r.s.note ? `<div class="muted">${esc(r.s.note)}</div>` : ''}</td>
+      return `<tr><td>${fmtD_(r.s.date)}</td><td>${esc(branchName(r.s.store))}</td><td><b>${esc(r.s.name)}</b> <span class="muted">${r.s.empId}</span></td><td>${planned}${r.s.note ? `<div class="muted">${esc(r.s.note)}</div>` : ''}</td>
         <td><span class="tag ${c}">${l}</span>${r.s.feedback ? `<div class="muted" style="max-width:220px">“${esc(r.s.feedback)}”</div>` : ''}</td>
         <td>${r.inPunch ? ampm_(esc(String(r.inPunch.time).slice(11, 16))) + (r.out ? '–' + ampm_(esc(r.out)) : ' (still in)') + (r.inPunch.status === 'FLAGGED' ? ' <span class="tag t-warn">review</span>' : '') : '—'}</td>
-        <td>${r.s.type === 'WEEKOFF' || r.s.type === 'LEAVE' ? '—' : resTag(r)}</td><td class="muted">${esc(String(r.s.plannedBy || '').split(' ').slice(1).join(' ') || r.s.plannedBy)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted">Nothing here</td></tr>'}
+        <td>${r.s.type === 'WEEKOFF' || r.s.type === 'LEAVE' ? '—' : resTag(r)}</td><td class="muted">${esc(String(r.s.plannedBy || '').split(' ').slice(1).join(' ') || r.s.plannedBy)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="muted">Nothing matches these filters</td></tr>'}
     </tbody></table></div></div>
     ${un.length ? `<div class="card"><h2>Worked without a planned shift (${un.length})</h2><p class="muted">Punched IN on a day they had no planned shift, at a store that uses planning.</p>
       <div class="scroll"><table><thead><tr><th>Date</th><th>Employee</th><th>Store</th><th>IN</th></tr></thead><tbody>
-      ${un.map(p => `<tr><td>${esc(String(p.time).slice(0, 10))}</td><td><b>${esc(p.name)}</b> <span class="muted">${p.empId}</span></td><td>${esc(branchName(p.store))}</td><td>${esc(String(p.time).slice(11, 16))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      ${un.map(p => `<tr><td>${fmtD_(String(p.time).slice(0, 10))}</td><td><b>${esc(p.name)}</b> <span class="muted">${p.empId}</span></td><td>${esc(branchName(p.store))}</td><td>${ampm_(String(p.time).slice(11, 16))}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
     ${assignCard()}`;
 }
 /* Assign managers to stores (who can plan shifts where) */
@@ -866,7 +890,7 @@ function daily() {
     }).join('')}</tbody></table></div></div>`;
 }
 function selfieBtn(p) { return p && p.selfieId ? `<button class="btn" style="padding:3px 9px" onclick="viewSelfie('${p.selfieId}','${esc(D_name(p))}')">View</button>` : '<span class="muted">—</span>'; }
-function D_name(p) { const e = ST.D.emp[p.empId]; return (e ? e.name : p.empId) + ' · ' + p.type + ' ' + p.time.slice(0, 16).replace('T', ' '); }
+function D_name(p) { const e = ST.D.emp[p.empId]; return (e ? e.name : p.empId) + ' · ' + p.type + ' ' + fmtDT_(p.time); }
 async function loadSelfie(id) {
   if (ST.selfies[id]) return ST.selfies[id];
   const r = await api({ action: 'getSelfie', selfieId: id }); ST.selfies[id] = r.dataUrl; return r.dataUrl;
@@ -879,7 +903,11 @@ async function viewSelfie(id, title) {
 /* ---------------- REVIEW ---------------- */
 function flags() {
   const D = ST.D;
-  const issues = D.issues.filter(i => i.kind !== 'On shift now');
+  const fb = ST.flagStore || 'ALL', fe = ST.flagEmp || 'ALL', ff = ST.flagFrom || '', ft = ST.flagTo || '';
+  const allIssues = D.issues.filter(i => i.kind !== 'On shift now');
+  const issues = allIssues.filter(i => (fb === 'ALL' || i.punch.store === fb) && (fe === 'ALL' || i.emp.id === fe)
+    && (!ff || i.punch.time.slice(0, 10) >= ff) && (!ft || i.punch.time.slice(0, 10) <= ft));
+  const issueEmps = D.employees.filter(e => allIssues.some(i => i.emp.id === e.id)).sort((a, b) => a.name.localeCompare(b.name));
   $('#main').innerHTML = `
   <div class="card"><h2>Flagged punches (${D.flagged.length})</h2>
     <p class="muted" style="margin-top:-6px">Not counted in pay until approved. Approve if the selfie is the right person and they were really at work.</p>
@@ -888,7 +916,7 @@ function flags() {
       return `<div class="card"><div class="flag">
         <div class="selfie" id="sf_${p.punchId}" onclick="thumb('${p.punchId}','${p.selfieId}')">${p.selfieId ? 'Tap to load selfie' : 'No selfie'}</div>
         <div><div class="row"><b>${esc(e.name)}</b><span class="muted">${p.empId}</span></div>
-          <div class="muted" style="margin-top:4px">${p.type} · ${p.time.slice(0, 16).replace('T', ' ')}</div>
+          <div class="muted" style="margin-top:4px">${p.type} · ${fmtDT_(p.time)}</div>
           <div style="margin-top:6px"><span class="tag t-warn">${esc(p.reason)}</span></div>
           ${p.liveness ? `<div class="muted" style="margin-top:4px;font-size:12px">Face check: ${esc(liveTxt(p.liveness))}</div>` : ''}
           <div class="muted" style="margin-top:6px">Nearest: ${esc(branchName(p.store))}${p.distanceM !== '' ? ' · ' + p.distanceM + ' m' : ''}${p.accuracyM !== '' ? ' · GPS ±' + p.accuracyM + ' m' : ''}</div>
@@ -896,11 +924,18 @@ function flags() {
           <div class="row" style="margin-top:10px"><button class="btn g" onclick="review('${p.punchId}','approve')">Approve</button><button class="btn r" onclick="review('${p.punchId}','reject')">Reject</button></div>
         </div></div></div>`; }).join('') || '<p class="muted">Nothing to review. 🎉</p>'}
     </div></div>
-  <div class="card" style="margin-top:14px"><h2>Missing OUT / broken shifts (${issues.length})</h2>
-    <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts.</p>
+  <div class="card" style="margin-top:14px"><h2>Missing OUT / broken shifts (${issues.length}${issues.length !== allIssues.length ? ` of ${allIssues.length}` : ''})</h2>
+    <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts. Resolving one (by adding the missing punch) removes it from this list right away.</p>
+    <div class="row" style="gap:8px;margin-bottom:10px">
+      <div style="width:200px">${branchSelect(fb, "ST.flagStore=this.value;render()")}</div>
+      <div style="width:220px"><select onchange="ST.flagEmp=this.value;render()"><option value="ALL" ${fe === 'ALL' ? 'selected' : ''}>All employees</option>${issueEmps.map(e => `<option value="${e.id}" ${e.id === fe ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`).join('')}</select></div>
+      <label class="muted" style="font-size:12px">From<input type="date" style="width:auto;display:block" value="${ff}" onchange="ST.flagFrom=this.value;render()"></label>
+      <label class="muted" style="font-size:12px">To<input type="date" style="width:auto;display:block" value="${ft}" onchange="ST.flagTo=this.value;render()"></label>
+      ${fb !== 'ALL' || fe !== 'ALL' || ff || ft ? `<button class="btn" onclick="ST.flagStore='ALL';ST.flagEmp='ALL';ST.flagFrom='';ST.flagTo='';render()">Clear filters</button>` : ''}
+    </div>
     <table><thead><tr><th>Employee</th><th>Problem</th><th>Punch</th><th>Store</th><th></th></tr></thead><tbody>
-    ${issues.map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${i.punch.time.slice(0, 16).replace('T', ' ')}</td><td>${esc(branchName(i.punch.store))}</td>
-      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">None</td></tr>'}
+    ${issues.map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td><td>${esc(branchName(i.punch.store))}</td>
+      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${allIssues.length ? 'None match these filters' : 'None'}</td></tr>`}
     </tbody></table>
     <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
 }
@@ -965,7 +1000,7 @@ function editEmp(id) {
       <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
     </div>
     ${id ? `<div style="margin-top:12px"><b>Face ID for punch check</b>
-      <div class="row" style="margin-top:4px">${e.faceDescriptor ? `<span class="tag t-ok">Enrolled${e.faceEnrolledAt ? ' · ' + esc(String(e.faceEnrolledAt).slice(0, 10)) : ''}${String(e.faceEnrolledBy || '').indexOf('(self') >= 0 ? ' · self, first punch' : ''}</span>` : '<span class="tag t-bad">Not enrolled yet — their first punch will auto-enroll it and show up flagged for your review</span>'}
+      <div class="row" style="margin-top:4px">${e.faceDescriptor ? `<span class="tag t-ok">Enrolled${e.faceEnrolledAt ? ' · ' + fmtD_(String(e.faceEnrolledAt).slice(0, 10)) : ''}${String(e.faceEnrolledBy || '').indexOf('(self') >= 0 ? ' · self, first punch' : ''}</span>` : '<span class="tag t-bad">Not enrolled yet — their first punch will auto-enroll it and show up flagged for your review</span>'}
       <button class="btn" onclick="enrollFaceDialog('${id}')">${e.faceDescriptor ? 'Re-enroll' : 'Enroll'} face photo</button></div>
       <p class="muted" style="margin-top:4px">Every future punch is checked against this photo; a different face is refused, not just flagged. If a self-enrolled photo turns out to be the wrong person, re-enroll here to replace it.</p></div>` : ''}
     <div style="margin-top:12px"><b>Plans shifts for</b> <span class="muted">(managers only — needs “Can punch at any store” = Yes)</span>
@@ -1057,7 +1092,7 @@ function delReg(kind, rowId) { if (confirmInline('Remove this entry?')) act({ ac
 function releaseCard() {
   const D = ST.D; if (D.role !== 'admin' && D.role !== 'hr') return '';
   const rel = (D.releases || []).find(r => r.month === D.month), closed = D.month < periodOf(D.now.slice(0, 10));
-  if (rel) return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--ok)"><div class="row"><div><b>Payslips released to staff</b><div class="muted">${esc(D.monthLabel)} · released by ${esc(rel.releasedBy)} on ${String(rel.releasedAt).slice(0, 16).replace('T', ' ')}. Staff see these figures in My BWC.</div></div><div class="sp"></div><button class="btn" onclick="withdrawRelease()">Withdraw</button></div></div>`;
+  if (rel) return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--ok)"><div class="row"><div><b>Payslips released to staff</b><div class="muted">${esc(D.monthLabel)} · released by ${esc(rel.releasedBy)} on ${fmtDT_(rel.releasedAt)}. Staff see these figures in My BWC.</div></div><div class="sp"></div><button class="btn" onclick="withdrawRelease()">Withdraw</button></div></div>`;
   return `<div class="card" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="row"><div><b>Not released to staff</b><div class="muted">${closed ? `Staff see their ${esc(D.monthLabel)} attendance but no pay. Release once the payout is done — ${D.hasV9 ? 'the imported payroll figures' : 'the figures on this page'} become their payslips.` : `${esc(D.monthLabel)} is still running. Pay can be released after the month closes.`}</div></div><div class="sp"></div>${closed ? `<button class="btn g" onclick="releasePay()">Release payslips</button>` : ''}</div></div>`;
 }
 async function releasePay() {
@@ -1211,7 +1246,7 @@ function stores() {
     <div class="scroll"><table><thead><tr><th>Code</th><th>Store</th><th>Location</th><th class="num">Radius</th><th>Captured by</th><th>Photos</th><th>Shift planners</th><th>Active</th><th></th></tr></thead><tbody>
     ${D.stores.map(s => { const c = (D.captures || []).filter(x => x.store === s.code).pop();
       return `<tr><td>${s.code}</td><td><b>${esc(s.name)}</b></td><td>${s.lat === '' ? '<span class="tag t-bad">not set</span>' : `${s.lat}, ${s.lng}`}</td><td class="num">${s.radiusM} m</td>
-      <td>${s.capturedBy ? `${esc(s.capturedBy)}<div class="muted">${String(s.capturedAt).slice(0, 16).replace('T', ' ')}${c ? ' · ±' + c.accuracyM + ' m' : ''}</div>${c ? `<span class="tag ${/^VERIFIED/.test(c.status) ? 't-ok' : 't-warn'}">${esc(c.status)}</span>` : ''}` : s.lat !== '' ? '<span class="tag t-warn">typed in by ' + esc(s.updatedBy) + '</span>' : '<span class="muted">—</span>'}</td>
+      <td>${s.capturedBy ? `${esc(s.capturedBy)}<div class="muted">${fmtDT_(s.capturedAt)}${c ? ' · ±' + c.accuracyM + ' m' : ''}</div>${c ? `<span class="tag ${/^VERIFIED/.test(c.status) ? 't-ok' : 't-warn'}">${esc(c.status)}</span>` : ''}` : s.lat !== '' ? '<span class="tag t-warn">typed in by ' + esc(s.updatedBy) + '</span>' : '<span class="muted">—</span>'}</td>
       <td>${c ? `<button class="btn" onclick="capturePhotos('${s.code}')">View</button>` : '<span class="muted">—</span>'}</td>
       <td>${planners(s.code) || '<span class="tag t-bad">none</span>'} <a class="btn" onclick="goAssign()">Assign</a></td><td>${s.active}</td>
       <td><button class="btn" onclick="editStore('${s.code}')">Edit</button> ${s.locked === 'Yes' ? `<button class="btn r" onclick="unlockStore('${s.code}')">Unlock</button>` : ''} ${s.lat !== '' ? `<a class="btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank" rel="noopener">Map</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;
@@ -1222,7 +1257,7 @@ function unlockStore(code) { if (confirmInline('Unlock this store so a manager c
 async function capturePhotos(code) {
   const D = ST.D, s = D.stores.find(x => x.code === code), c = (D.captures || []).filter(x => x.store === code).pop();
   openDrawer(`<div class="row"><h2 style="margin:0">${esc(s.name)} · capture</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
-    <p class="muted">${esc(c.name)} (${c.empId}) · ${c.time.slice(0, 16).replace('T', ' ')} · ±${c.accuracyM} m · ${esc(c.status)}</p>
+    <p class="muted">${esc(c.name)} (${c.empId}) · ${fmtDT_(c.time)} · ±${c.accuracyM} m · ${esc(c.status)}</p>
     ${[['selfieId', 'Live selfie (gesture frames)'], ['outsideId', 'Outside'], ['insideId', 'Inside']].map(([k, l]) => `<h2 style="margin-top:14px">${l}</h2><div id="cp_${k}" class="muted">Loading…</div>`).join('')}`);
   for (const k of ['selfieId', 'outsideId', 'insideId']) {
     try { $('#cp_' + k).innerHTML = `<img src="${await loadSelfie(c[k])}" style="width:100%;border-radius:12px">`; } catch (e) { $('#cp_' + k).textContent = e.message; }
@@ -1265,19 +1300,19 @@ function reqs() {
   const pend = R.filter(r => r.status === 'PENDING'), done = R.filter(r => r.status !== 'PENDING');
   const faceResetPend = pend.filter(r => r.kind === 'FACE_RESET').length;
   const body = r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {} const e = D.emp[r.empId] || {};
-    if (r.kind === 'CORRECTION') return `<b>Missing or wrong punch</b> · ${esc(d.date)} · ${esc(d.inT)}–${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
-    if (r.kind === 'MISSED_PUNCHOUT') return `<b>Missed punch-out</b> · ${esc(d.date)} · clocked in ${esc(String(d.inTime).slice(11, 16))}, says they left ${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
+    if (r.kind === 'CORRECTION') return `<b>Missing or wrong punch</b> · ${fmtD_(d.date)} · ${esc(d.inT)}–${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
+    if (r.kind === 'MISSED_PUNCHOUT') return `<b>Missed punch-out</b> · ${fmtD_(d.date)} · clocked in ${ampm_(String(d.inTime).slice(11, 16))}, says they left ${ampm_(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
     if (r.kind === 'FACE_RESET') return `<b>Face photo isn't matching</b><div class="muted">“${esc(d.reason)}”</div><p class="muted" style="margin-top:4px">Approving clears their stored photo — they self-enroll again on their next punch, through the quality-gated capture.</p>`;
-    if (r.kind === 'PETTY_CASH') return `<b>Petty cash · ₹${esc(d.amount)} · ${esc(d.category)}</b> · ${esc(branchName(d.store))} · ${esc(d.date)}<div class="muted">“${esc(d.note)}”</div>
+    if (r.kind === 'PETTY_CASH') return `<b>Petty cash · ₹${esc(d.amount)} · ${esc(d.category)}</b> · ${esc(branchName(d.store))} · ${fmtD_(d.date)}<div class="muted">“${esc(d.note)}”</div>
       <div class="row" style="margin-top:6px">${(d.photoIds || []).map((id, i) => `<button class="btn" style="padding:3px 9px" onclick="viewSelfie('${id}','${esc(r.name)} — invoice ${i + 1}')">Invoice ${i + 1}</button>`).join('')}</div>`;
     return `<b>Update details</b><table style="margin-top:6px"><tbody>${Object.keys(d).map(k => `<tr><td class="muted">${REQ_F[k] || k}</td><td>${esc(e[k] || '—')}</td><td>→</td><td><b>${esc(d[k])}</b></td></tr>`).join('')}</tbody></table>`; };
   $('#main').innerHTML = `<div class="card"><div class="row"><h2 style="margin:0">Waiting for you · ${pend.length}</h2><div class="sp"></div>${(D.role === 'hr' && faceResetPend) ? `<button class="btn r" onclick="bulkApproveFaceResets(${faceResetPend})">Bulk approve ${faceResetPend} face reset${faceResetPend === 1 ? '' : 's'}</button>` : ''}</div>
     <p class="muted" style="margin-top:6px">Staff send these from My BWC (heavencrescita.github.io/attendance/me.html). Approving a punch correction adds a manual IN and OUT; approving details updates the employee record. Missed punch-outs, petty cash expenses and face photo resets can only be approved by Sarah (HR admin).</p>
-    ${pend.map(r => { const locked = (r.kind === 'MISSED_PUNCHOUT' || r.kind === 'PETTY_CASH' || r.kind === 'FACE_RESET') && D.role !== 'hr'; return `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${String(r.createdAt).slice(0, 16).replace('T', ' ')}</span>${r.test ? ' <span class="tag t-mute">test account</span>' : ''}${(r.kind === 'MISSED_PUNCHOUT' || r.kind === 'PETTY_CASH' || r.kind === 'FACE_RESET') ? ' <span class="tag t-warn">needs Sarah</span>' : ''}</div></div>
+    ${pend.map(r => { const locked = (r.kind === 'MISSED_PUNCHOUT' || r.kind === 'PETTY_CASH' || r.kind === 'FACE_RESET') && D.role !== 'hr'; return `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(r.name)}</b> <span class="muted">${r.empId} · ${fmtDT_(r.createdAt)}</span>${r.test ? ' <span class="tag t-mute">test account</span>' : ''}${(r.kind === 'MISSED_PUNCHOUT' || r.kind === 'PETTY_CASH' || r.kind === 'FACE_RESET') ? ' <span class="tag t-warn">needs Sarah</span>' : ''}</div></div>
       <div style="margin:8px 0">${body(r)}</div>
       ${locked ? `<p class="muted">Only Sarah (HR admin) can review this one.</p>` : `<div class="row"><input type="text" id="rn-${r.requestId}" placeholder="Note to the employee (optional)" style="flex:1"><button class="btn g" onclick="decide('${r.requestId}','APPROVE')">Approve</button><button class="btn r" onclick="decide('${r.requestId}','REJECT')">Reject</button></div>`}</div>`; }).join('') || '<p class="muted">Nothing to review.</p>'}</div>
   ${done.length ? `<div class="card" style="margin-top:14px"><h2>Recently decided</h2><div class="scroll"><table><thead><tr><th>When</th><th>Employee</th><th>Request</th><th>Decision</th><th>By</th></tr></thead><tbody>
-    ${done.map(r => `<tr><td>${String(r.decidedAt).slice(0, 10)}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+    ${done.map(r => `<tr><td>${fmtD_(String(r.decidedAt).slice(0, 10))}</td><td>${esc(r.name)} <span class="muted">${r.empId}</span></td><td style="white-space:normal">${body(r)}</td><td>${r.status === 'APPROVED' ? '<span class="tag t-ok">Approved</span>' : '<span class="tag t-bad">Rejected</span>'} <span class="muted">${esc(r.decisionNote)}</span></td><td>${esc(r.decidedBy)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
   ${(D.role === 'admin' || D.role === 'hr') ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
     <p class="muted" style="margin-top:-6px">WAFF-901 “Test Employee” works in My BWC and on the punch screen like a real employee, but WAFF-900 to WAFF-999 never count in payroll, the dashboard, exports or the shift planner. Resetting wipes its punches, shifts and requests and loads fresh sample data for this month.</p>
     <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>
@@ -1291,7 +1326,7 @@ async function checkBadFace() {
   const r = await api({ action: 'clearBadFaceEnrollments', apply: false });
   if (!r.count) { $('#bfOut').textContent = 'None found — every stored face reference looks supervised.'; $('#bfList').innerHTML = ''; return; }
   $('#bfOut').textContent = `${r.count} employee${r.count === 1 ? '' : 's'} self-enrolled before the quality gate shipped.`;
-  $('#bfList').innerHTML = `<ul style="margin:8px 0 10px 18px">${r.employees.map(e => `<li>${e.id} — ${esc(e.name)} <span class="muted">(enrolled ${String(e.enrolledAt).slice(0, 10)})</span></li>`).join('')}</ul>
+  $('#bfList').innerHTML = `<ul style="margin:8px 0 10px 18px">${r.employees.map(e => `<li>${e.id} — ${esc(e.name)} <span class="muted">(enrolled ${fmtD_(String(e.enrolledAt).slice(0, 10))})</span></li>`).join('')}</ul>
     <button class="btn r" onclick="applyClearBadFace(${r.count})">Clear all ${r.count} and require re-enrollment</button>`;
 }
 async function applyClearBadFace(n) {
