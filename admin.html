@@ -152,14 +152,13 @@ function importedShifts(rows) {
 
 function daysInMonth(month) { const [y, m] = month.split('-').map(Number); return new Date(y, m, 0).getDate(); }
 function addMonths(month, n) { const y = Number(month.slice(0, 4)), m0 = Number(month.slice(5, 7)) - 1 + n; return (y + Math.floor(m0 / 12)) + '-' + String(((m0 % 12) + 12) % 12 + 1).padStart(2, '0'); }
-// Payroll periods run the 15th of one month through the 14th of the next, named for the month they END
-// in — period "2026-10" is 15 Sep through 14 Oct 2026 (30 days). Mirrors periodBounds_/periodOf_ in Code.gs.
+// Payroll periods are the calendar month — period "2026-10" is 1 Oct through 31 Oct 2026. Mirrors periodBounds_/periodOf_ in Code.gs.
 function periodRange(month) {
-  const startDate = addMonths(month, -1) + '-15', endDate = month + '-14';
-  const start = new Date(startDate + 'T00:00:00+05:30').getTime(), end = new Date(month + '-15T00:00:00+05:30').getTime();
+  const startDate = month + '-01', endDate = month + '-' + String(daysInMonth(month)).padStart(2, '0');
+  const start = new Date(startDate + 'T00:00:00+05:30').getTime(), end = new Date(addMonths(month, 1) + '-01T00:00:00+05:30').getTime();
   return { startDate, endDate, start, end, days: Math.round((end - start) / 86400000) };
 }
-function periodOf(ymd) { const mo = String(ymd).slice(0, 7), day = Number(String(ymd).slice(8, 10)); return day >= 15 ? addMonths(mo, 1) : mo; }
+function periodOf(ymd) { return String(ymd).slice(0, 7); }
 function excelRound(x) { return Math.sign(x) * Math.round(Math.abs(x) + 1e-9); }
 // Count distinct accepted Week Off days a manager planned for this employee, within the payroll period.
 // Planner dates are the source of truth once any exist for that employee in-period — they override both
