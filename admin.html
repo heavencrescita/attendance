@@ -1121,7 +1121,7 @@ function pay() {
   <div class="card" style="margin-top:14px">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Payroll · ${esc(D.monthLabel)}</h2><div class="sp"></div>
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
-      <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button>${isAdmin ? `<button class="btn" onclick="exportPayrollERP()" title="Full ERP-format payroll register, including bank details — admin/HR only">Download Payroll Sheet (.xlsx)</button>` : ''}</div>
+            <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button>${isAdmin ? `<button class="btn" onclick="exportPayrollERP()" title="Full ERP-format payroll register, including bank details — admin/HR only">Download Payroll Sheet (.xlsx)</button><button class="btn" onclick="exportPayrollWorkbook()" title="Employee Master, Attendance, Deduction/Addition Registers, Payroll and Branch Summary/Payment Advice in one file — admin/HR only">Download Full Month Workbook (.xlsx)</button>` : ''}</div>
     <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">OT</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th>${D.hasV9 ? '<th class="num">V9 NET</th>' : ''}<th>Notes</th></tr></thead><tbody>
     ${R.map(({ e, r, branchSplit: bs }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${bs && bs.length > 1 ? ` <span class="tag t-mute" title="${bs.map(a => branchName(a.branch) + ' ' + (a.frac * 100).toFixed(0) + '%').join(' · ')}">split</span>` : (bs && bs[0].branch !== e.branch ? ` <span class="tag t-warn" title="Roster says ${esc(branchName(e.branch))}; attendance this month is all at ${esc(branchName(bs[0].branch))}">moved?</span>` : '')}</td><td>${e.payType}</td>
       <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
@@ -1235,6 +1235,71 @@ function exportPayrollERP() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, `${D.month} PAYROLL`.slice(0, 31));
   XLSX.writeFile(wb, `BWC_Payroll_${D.month}_ERP.xlsx`);
+}
+
+// Full monthly data workbook — EMPLOYEE MASTER, ATTENDANCE INPUT, DEDUCTION REGISTER, ADDITION
+// REGISTER, the PAYROLL register (same layout as exportPayrollERP), BRANCH SUMMARY and PAYMENT
+// ADVICE, all computed live from this month's attendance/payroll data. Mirrors the data tabs of
+// BWC_Payroll_<Mon>_FINAL.xlsx; deliberately leaves out PARAMETERS, CONTROL PANEL and the
+// chart-driven DASHBOARD tab, which are hand-maintained config/reconciliation sheets, not
+// something derivable from the app's own data. admin/HR only — bank details unmasked.
+function exportPayrollWorkbook() {
+  const D = ST.D;
+  if (typeof XLSX === 'undefined') return toast('Could not load the spreadsheet library — check your connection and try again', true);
+  const wb = XLSX.utils.book_new();
+  const addSheet = (name, rows, widths) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    if (widths) ws['!cols'] = widths.map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+  };
+
+  const EMP_HEAD = ['WAFF ID', 'Name', 'Branch / Shop', 'Planned Salary (₹)', 'Duty Hrs / Shift', 'Pay Type', 'Status',
+    'Bank Account No.', 'IFSC Code', 'Pay Group', 'Week-Off Override (days)', 'Daily Rate (₹/day)'];
+  addSheet('EMPLOYEE MASTER', [EMP_HEAD, ...D.employees.map(e => [e.id, e.name, branchName(e.branch).toUpperCase(), Number(e.plan) || 0, e.duty,
+    e.payType, e.status, e.bankAcct || '', e.ifsc || '', e.bankAcct ? 'NEFT' : 'CASH', e.woDays === '' || e.woDays == null ? '' : Number(e.woDays), Number(e.dailyRate) || 0])], EMP_HEAD.map(() => 16));
+
+  const ATT_HEAD = ['Name', 'EMP ID', 'Date', 'Branch', 'IN', 'OUT', 'Total Hrs'];
+  const attRows = [];
+  D.employees.forEach(e => D.byEmp[e.id].inMonth.forEach(s => {
+    const h = Math.floor(s.hours), m = Math.round((s.hours - h) * 60);
+    attRows.push([e.name, e.id, s.date, branchName(s.store).toUpperCase(), s.in, s.out.replace(' +1', ''), `${h}:${String(m).padStart(2, '0')}`]);
+  }));
+  addSheet('ATTENDANCE INPUT', [ATT_HEAD, ...attRows], ATT_HEAD.map(() => 14));
+
+  const regSheet = (name, list, catCol) => {
+    const head = ['Sl', 'WAFF ID', 'Name', 'Branch', 'Category', catCol, 'Amount (₹)', 'Added By', 'Added At', 'Applied to Month', 'MonthKey'];
+    const rows = list.map((x, i) => { const e = D.emp[x.empId] || {};
+      return [i + 1, x.empId, e.name || '', branchName(e.branch || '').toUpperCase(), x.category, x.note || '', Number(x.amount) || 0, x.addedBy || '', String(x.addedAt || '').slice(0, 10), D.monthLabel, D.month]; });
+    addSheet(name, [head, ...rows], head.map(() => 15));
+  };
+  regSheet('DEDUCTION REGISTER', D.deductions, 'Sub-reason / Detail');
+  regSheet('ADDITION REGISTER', D.additions, 'Description');
+
+  const blank2 = Array(ERP_HEAD.length - 1).fill('');
+  const payRows = [['HEAVEN CRESCITA — PAYROLL REGISTER', ...blank2], [`Period: ${D.monthLabel}`, `Generated: ${new Date().toLocaleString('en-IN')}`, ...blank2.slice(1)], ERP_HEAD];
+  const erpRows = D.pay.map(({ e, r }, i) => erpRow(e, r, i + 1));
+  erpRows.forEach(r => payRows.push(r));
+  const payWs = XLSX.utils.aoa_to_sheet(payRows);
+  payWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: ERP_HEAD.length - 1 } }];
+  payWs['!cols'] = ERP_HEAD.map(() => ({ wch: 14 }));
+  XLSX.utils.book_append_sheet(wb, payWs, `${D.month} PAYROLL`.slice(0, 31));
+
+  const BR_HEAD = ['Branch / Shop', 'Active', 'Inactive', 'Plan Total (₹)', 'Base Pay (₹)', 'OT Pay (₹)', 'Deductions (₹)', 'Additions (₹)', 'NET Pay (₹)', 'Avg Sal/Emp'];
+  const brRows = branchCodes().map(b => {
+    const emps = D.employees.filter(e => e.branch === b), act = emps.filter(e => e.status === 'Active').length, inact = emps.length - act;
+    const payRows2 = D.pay.filter(x => x.e.branch === b);
+    const sum = k => payRows2.reduce((s, x) => s + Number(x.r[k] || 0), 0), planTot = emps.reduce((s, e) => s + (Number(e.plan) || 0), 0);
+    const net = sum('net');
+    return [branchName(b).toUpperCase(), act, inact, planTot, Math.round(sum('base') * 100) / 100, Math.round(sum('otPay') * 100) / 100,
+      sum('dedT'), sum('addT'), net, emps.length ? Math.round(net / emps.length) : 0];
+  });
+  addSheet('BRANCH SUMMARY', [BR_HEAD, ...brRows], BR_HEAD.map(() => 15));
+
+  const PA_HEAD = ['#', 'WAFF ID', 'Name', 'Branch', 'Pay Group', 'Bank Account No.', 'IFSC Code', 'NET Payable (₹)', 'Payment Status', 'Remarks'];
+  const paRows = erpRows.map(r => [r[0], r[1], r[2], r[3], r[26], r[27], r[28], r[40], r[29], r[30]]);
+  addSheet('PAYMENT ADVICE', [PA_HEAD, ...paRows], PA_HEAD.map(() => 15));
+
+  XLSX.writeFile(wb, `BWC_Payroll_${D.month}_FULL.xlsx`);
 }
 
 /* ---------------- STORES (admin) ---------------- */
