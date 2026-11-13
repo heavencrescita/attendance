@@ -930,10 +930,13 @@ async function viewSelfie(id, title) {
 function flags() {
   const D = ST.D;
   const fb = ST.flagStore || 'ALL', fe = ST.flagEmp || 'ALL', ff = ST.flagFrom || '', ft = ST.flagTo || '';
+  const fr = ST.flagHideResolved !== false;
   const allIssues = D.issues.filter(i => i.kind !== 'On shift now');
-  const issues = allIssues.filter(i => (fb === 'ALL' || i.punch.store === fb) && (fe === 'ALL' || i.emp.id === fe)
+  const resolvedCount = allIssues.filter(i => i.punch.reviewedBy || i.punch.reviewNote).length;
+  const base = fr ? allIssues.filter(i => !(i.punch.reviewedBy || i.punch.reviewNote)) : allIssues;
+  const issues = base.filter(i => (fb === 'ALL' || i.punch.store === fb) && (fe === 'ALL' || i.emp.id === fe)
     && (!ff || i.punch.time.slice(0, 10) >= ff) && (!ft || i.punch.time.slice(0, 10) <= ft));
-  const issueEmps = D.employees.filter(e => allIssues.some(i => i.emp.id === e.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const issueEmps = D.employees.filter(e => base.some(i => i.emp.id === e.id)).sort((a, b) => a.name.localeCompare(b.name));
   $('#main').innerHTML = `
   <div class="card"><h2>Flagged punches (${D.flagged.length})</h2>
     <p class="muted" style="margin-top:-6px">Not counted in pay until approved. Approve if the selfie is the right person and they were really at work.</p>
@@ -950,18 +953,19 @@ function flags() {
           <div class="row" style="margin-top:10px"><button class="btn g" onclick="review('${p.punchId}','approve')">Approve</button><button class="btn r" onclick="review('${p.punchId}','reject')">Reject</button></div>
         </div></div></div>`; }).join('') || '<p class="muted">Nothing to review. 🎉</p>'}
     </div></div>
-  <div class="card" style="margin-top:14px"><h2>Missing OUT / broken shifts (${issues.length}${issues.length !== allIssues.length ? ` of ${allIssues.length}` : ''})</h2>
-    <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts. Resolving one (by adding the missing punch) removes it from this list right away.</p>
+  <div class="card" style="margin-top:14px"><h2>Missing OUT / broken shifts (${issues.length}${issues.length !== base.length ? ` of ${base.length}` : ''})</h2>
+    <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts. Resolving one (by adding the missing punch) removes it from this list right away.${resolvedCount ? ` ${resolvedCount} already reviewed — hidden by default.` : ''}</p>
     <div class="row" style="gap:8px;margin-bottom:10px">
       <div style="width:200px">${branchSelect(fb, "ST.flagStore=this.value;render()")}</div>
       <div style="width:220px"><select onchange="ST.flagEmp=this.value;render()"><option value="ALL" ${fe === 'ALL' ? 'selected' : ''}>All employees</option>${issueEmps.map(e => `<option value="${e.id}" ${e.id === fe ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`).join('')}</select></div>
       <label class="muted" style="font-size:12px">From<input type="date" style="width:auto;display:block" value="${ff}" onchange="ST.flagFrom=this.value;render()"></label>
       <label class="muted" style="font-size:12px">To<input type="date" style="width:auto;display:block" value="${ft}" onchange="ST.flagTo=this.value;render()"></label>
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" ${fr ? 'checked' : ''} onchange="ST.flagHideResolved=this.checked;render()">Hide reviewed (${resolvedCount})</label>
       ${fb !== 'ALL' || fe !== 'ALL' || ff || ft ? `<button class="btn" onclick="ST.flagStore='ALL';ST.flagEmp='ALL';ST.flagFrom='';ST.flagTo='';render()">Clear filters</button>` : ''}
     </div>
     <table><thead><tr><th>Employee</th><th>Problem</th><th>Punch</th><th>Store</th><th></th></tr></thead><tbody>
     ${issues.map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td><td>${esc(branchName(i.punch.store))}</td>
-      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${allIssues.length ? 'None match these filters' : 'None'}</td></tr>`}
+      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${base.length ? 'None match these filters' : 'None'}</td></tr>`}
     </tbody></table>
     <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
 }
