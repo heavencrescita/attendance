@@ -122,6 +122,32 @@ function capOutEpoch_(dateStr, hm, epoch) {
   return (mins >= 180 && mins < 240) ? new Date(dateStr + 'T03:00:00+05:30').getTime() : epoch;
 }
 
+// 3pm shift handover: an outgoing employee whose OUT lands between 15:00 and 17:00 keeps their full
+// clocked hours UNLESS the next shift's employee at the SAME branch has already punched IN by then —
+// in that case only a 15-minute handover overlap past that employee's IN time is paid; the rest of the
+// outgoing employee's clocked time is not counted. Runs once all employees' shifts for the month are
+// built (needs to see every employee's punches at a branch, not just one). Only adjusts `hours` used for
+// pay — the raw in/out punch times shown on screen are untouched, same as the early-morning (03:00/03:15)
+// closing cap above, which this does not replace or interact with.
+function toMins_(hm) { const m = /^(\d{2}):(\d{2})/.exec(hm || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
+function applyPmHandoverCap_(D) {
+  const byBranchDate = {};
+  D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => {
+    const key = s.store + '|' + s.date;
+    (byBranchDate[key] = byBranchDate[key] || []).push({ empId: e.id, inTime: s.in });
+  }));
+  D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => {
+    if (s.imported) return; // no raw punch to re-derive hours from
+    const outMins = toMins_(s.out);
+    if (outMins == null || outMins < 900 || outMins >= 1020) return; // only the 3:00pm–5:00pm handover window
+    const others = (byBranchDate[s.store + '|' + s.date] || []).filter(x => x.empId !== e.id);
+    let earliestIn = null;
+    others.forEach(o => { const inM = toMins_(o.inTime); if (inM != null && inM >= 900 && inM < outMins && (earliestIn == null || inM < earliestIn)) earliestIn = inM; });
+    if (earliestIn == null) return; // nobody from the next shift has punched in yet — full clocked hours stand
+    const capMins = Math.min(outMins, earliestIn + 15);
+    if (capMins < outMins) { s.hours = Math.max(0, s.hours - (outMins - capMins) / 60); s.pmCapped = true; }
+  }));
+}
 // Pair punches into shifts for one employee. Returns {shifts, issues}.
 function buildShifts(punches, now) {
   now = now || Date.now();
@@ -496,6 +522,7 @@ function derive() {
     D.byEmp[e.id] = b;
     b.issues.forEach(i => D.issues.push(Object.assign({ emp: e }, i)));
   });
+  applyPmHandoverCap_(D);
   D.flagged = D.punches.filter(p => p.status === 'FLAGGED').sort((a, b) => Number(b.epoch) - Number(a.epoch));
   D.v9 = Object.fromEntries((D.v9Ref || []).map(v => [v.empId, v]));
   // For an imported month, pay each person on the terms they had that month (salary, branch, status), not today's
