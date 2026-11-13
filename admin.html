@@ -999,8 +999,8 @@ function emps() {
       ${D.role === 'hr' ? `<button class="btn t" onclick="bulkPins()">Issue PINs to everyone without one</button>` : ''}
       ${D.role === 'hr' ? `<button class="btn y" onclick="editEmp(null)">+ Add employee</button>` : ''}</div>
     ${D.role !== 'hr' ? `<p class="muted" style="margin:-4px 0 10px">Adding employees and issuing PINs is reserved for Sarah (HR admin).</p>` : ''}
-    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Pay type</th><th class="num">Planned</th><th class="num">Duty h</th><th>Week-off paid</th><th>PIN</th><th>Status</th><th></th></tr></thead><tbody>
-    ${list.map(e => `<tr><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${e.roaming === 'Yes' ? ' <span class="tag t-mute">any store</span>' : ''}</td><td>${e.payType}</td><td class="num">${rs(e.plan)}</td><td class="num">${e.duty}</td><td>${e.woEligible}</td>
+    <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Joined</th><th>Pay type</th><th class="num">Planned</th><th class="num">Duty h</th><th>Week-off paid</th><th>PIN</th><th>Status</th><th></th></tr></thead><tbody>
+    ${list.map(e => `<tr><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${e.roaming === 'Yes' ? ' <span class="tag t-mute">any store</span>' : ''}</td><td>${e.doj ? fmtD_(e.doj) : ''}</td><td>${e.payType}</td><td class="num">${rs(e.plan)}</td><td class="num">${e.duty}</td><td>${e.woEligible}</td>
       <td>${e.hasPin ? '<span class="tag t-ok">Set</span>' : '<span class="tag t-bad">None</span>'}</td><td>${e.status === 'Active' ? '<span class="tag t-ok">Active</span>' : '<span class="tag t-mute">Inactive</span>'}</td>
       <td><button class="btn" onclick="editEmp('${e.id}')">Edit</button> ${D.role === 'hr' ? `<button class="btn" onclick="resetPin('${e.id}')">${e.hasPin ? 'Reset PIN' : 'Issue PIN'}</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div></div>`;
@@ -1023,6 +1023,7 @@ function editEmp(id) {
       <label>Week-off paid<select id="f_wo"><option ${e.woEligible !== 'No' ? 'selected' : ''}>Yes</option><option ${e.woEligible === 'No' ? 'selected' : ''}>No</option></select></label>
       <label>Paid week-offs / month<input type="number" id="f_wod" value="${e.woDays === '' || e.woDays == null ? 4 : e.woDays}"></label>
       <label>Daily rate (₹, if no paid week-off)<input type="number" id="f_dr" value="${Number(e.dailyRate || 0).toFixed(2)}"></label>
+      <label>Date of joining<input type="date" id="f_doj" value="${e.doj || ''}"></label>
       <label>Status<select id="f_status"><option ${e.status === 'Active' ? 'selected' : ''}>Active</option><option ${e.status !== 'Active' ? 'selected' : ''}>Inactive</option></select></label>
     </div>
     ${id ? `<div style="margin-top:12px"><b>Face ID for punch check</b>
@@ -1034,7 +1035,7 @@ function editEmp(id) {
     <button class="btn y" onclick="saveEmp(${id ? 'false' : 'true'})">Save</button>`);
 }
 async function saveEmp(isNew) {
-  await act({ action: 'saveEmployee', isNew, employee: { id: $('#f_id').value, name: $('#f_name').value, branch: $('#f_branch').value, roaming: $('#f_roam').value,
+  await act({ action: 'saveEmployee', isNew, employee: { id: $('#f_id').value, name: $('#f_name').value, branch: $('#f_branch').value, roaming: $('#f_roam').value, doj: $('#f_doj').value,
     payType: $('#f_type').value, plan: $('#f_plan').value, duty: $('#f_duty').value, woEligible: $('#f_wo').value, woDays: $('#f_wod').value, dailyRate: $('#f_dr').value, status: $('#f_status').value,
     mgrStores: [...document.querySelectorAll('#f_mgr input:checked')].map(x => x.value).join(',') } }, 'Saved');
   closeDrawer();
