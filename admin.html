@@ -794,10 +794,6 @@ function monthView() {
   });
   Object.values(bm).forEach(b => b.n = b.people.size);
   const brs = Object.values(bm).filter(b => b.net || b.hrs).sort((a, b) => b.net - a.net), maxB = Math.max(1, ...brs.map(b => b.base + b.ot));
-  // Roster-branch view: the same "NET payable" the Payroll page shows for this branch — 100% of each
-  // person's pay on their home branch, no hours-worked split. Differs from bm/brs above whenever staff
-  // cover shifts outside their roster branch (brs attributes pay by where hours were actually worked).
-  const bmHome = {}; rows.forEach(x => { const h = bmHome[x.e.branch] = bmHome[x.e.branch] || { net: 0, n: 0 }; h.net += x.net; if (x.net > 0) h.n++; });
   const avgHr = T.perHr;
   const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
     return `<b>${rs(r)}</b> ${d > 12 ? `<span class="tag t-warn">▲ ${d.toFixed(0)}% above avg</span>` : d < -12 ? `<span class="tag t-ok">▼ ${(-d).toFixed(0)}% below avg</span>` : '<span class="tag t-mute">≈ avg</span>'}`; };
@@ -812,6 +808,7 @@ function monthView() {
   const dayTot = days.map(d => new Set(shifts.filter(s => s.date === d).map(s => s.emp.id)).size);
   // open issues by day — unresolved Missing-OUT / OUT-without-IN punches (never "On shift now", never already reviewed)
   const openIssues = (D.issues || []).filter(i => i.kind !== 'On shift now' && !(i.punch.reviewedBy || i.punch.reviewNote) && i.punch.time.slice(0, 10) >= prD.startDate && i.punch.time.slice(0, 10) <= prD.endDate);
+  ST._shifts = shifts; ST._openIssues = openIssues;
   const ib = {}; openIssues.forEach(i => { const k = i.punch.store || i.emp.branch; const d = i.punch.time.slice(0, 10); (ib[k] = ib[k] || {})[d] = (ib[k][d] || 0) + 1; });
   const ibRows = Object.keys(ib).sort((a, b) => branchName(a).localeCompare(branchName(b)));
   const imax = Math.max(1, ...ibRows.flatMap(k => Object.values(ib[k])));
@@ -842,15 +839,14 @@ function monthView() {
   <div class="grid two" style="margin-top:14px">
     <div class="card"><div class="row"><h2 style="margin:0">Branches ranked by pay</h2><div class="sp"></div>
       <span class="lg"><i style="background:var(--c1)"></i>Base pay</span><span class="lg"><i style="background:var(--c2)"></i>Overtime</span></div>
-      <div class="scroll" style="margin-top:8px"><table class="rank"><thead><tr><th>Branch</th><th class="num">Staff</th><th class="num">Hours</th><th style="width:24%">Pay</th><th class="num" title="Pay attributed here by where hours were actually clocked — splits a person's pay across branches if they covered a shift elsewhere">NET · hours worked</th><th class="num" title="Full NET for everyone whose roster branch is this one, no splitting — matches the Payroll page's NET payable for this branch">NET · payable</th><th>₹ / hour</th><th class="num">OT share</th></tr></thead><tbody>
-      ${brs.map(b => { const h = bmHome[b.b]; const diff = h ? Math.abs(b.net - h.net) : 0; const diffPct = h && h.net ? diff / h.net * 100 : 0; return `<tr class="click" onclick="ST.branch='${b.b}';go('pay')" title="${esc(branchName(b.b))}: base ${rs(b.base)} · OT ${rs(b.ot)} · deductions ${rs(b.ded)}">
+      <div class="scroll" style="margin-top:8px"><table class="rank"><thead><tr><th>Branch</th><th class="num">Staff</th><th class="num">Hours</th><th style="width:24%">Pay</th><th class="num" title="NET payable attributed here by where hours were actually worked this month — not by roster/home branch">NET payable</th><th>₹ / hour</th><th class="num">OT share</th></tr></thead><tbody>
+      ${brs.map(b => `<tr class="click" onclick="ST.branch='${b.b}';go('pay')" title="${esc(branchName(b.b))}: base ${rs(b.base)} · OT ${rs(b.ot)} · deductions ${rs(b.ded)}">
         <td><b>${esc(branchName(b.b))}</b></td><td class="num">${b.n}</td><td class="num">${Math.round(b.hrs).toLocaleString('en-IN')}</td>
         <td><div class="sbar"><i style="width:${(b.base / maxB * 100).toFixed(1)}%;background:var(--c1)"></i>${b.ot ? `<i style="width:${(b.ot / maxB * 100).toFixed(1)}%;background:var(--c2)"></i>` : ''}</div></td>
         <td class="num"><b>${rs(b.net)}</b></td>
-        <td class="num">${h ? `<b>${rs(h.net)}</b> <span class="muted" style="font-size:11px">· ${h.n}</span>${diffPct >= 10 ? ` <span class="tag t-warn" title="Differs from the hours-worked figure by ${rs(diff)}">±${diffPct.toFixed(0)}%</span>` : ''}` : '<span class="muted">—</span>'}</td>
-        <td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`; }).join('')}
+        <td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`).join('')}
       </tbody></table></div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime. "NET · hours worked" and "NET · payable" differ whenever staff cover shifts outside their roster branch — a large gap (±10%+, flagged) is worth a look.${splitPeople.length ? ` <a href="#" onclick="showBranchSplits();return false">${splitPeople.length} covered a shortage elsewhere — pay split by hours worked →</a>` : ''}</p></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked, with NET payable here attributed by where hours were actually clocked — the same basis the Payroll page's per-branch filter uses, so the two always match. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime.${splitPeople.length ? ` <a href="#" onclick="showBranchSplits();return false">${splitPeople.length} covered a shortage elsewhere — pay split by hours worked →</a>` : ''}</p></div>
     <div class="grid" style="align-content:start">
       <div class="card"><h2>Pay by month</h2>${trend.length > 1 ? colChart(trend, lakh) : `<p class="muted">Only one month of data so far.</p>${colChart(trend, lakh)}`}</div>
       <div class="card"><h2>Hours worked by month</h2>${colChart(trendH, v => Math.round(v).toLocaleString('en-IN'))}</div>
@@ -859,14 +855,14 @@ function monthView() {
   <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Staffing calendar · people on shift each day</h2><div class="sp"></div>
     <span class="lg">fewer <span class="ramp"></span> more</span></div>
     <div class="scroll" style="margin-top:8px"><table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Avg/day</th></tr></thead><tbody>
-    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] ? hb[k][d].size : 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] ? hb[k][d].size : 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} staff worked">${v || ''}</td>`; }).join('')}<td class="num">${(tot / days.length).toFixed(1)}</td></tr>`; }).join('')}
-    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} staff worked">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / days.length).toFixed(1)}</td></tr>
+    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] ? hb[k][d].size : 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] ? hb[k][d].size : 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0};cursor:pointer" onclick="showStaffDay('${k}','${d}')" title="${esc(branchName(k))} · ${d}: ${v} staff worked — click for details">${v || ''}</td>`; }).join('')}<td class="num">${(tot / days.length).toFixed(1)}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td style="cursor:pointer" onclick="showStaffDay('ALL','${days[i]}')" title="${days[i]}: ${v} staff worked — click for details">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / days.length).toFixed(1)}</td></tr>
     </tbody></table></div></div>
   <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Open issues by day · unresolved Missing OUT / broken shifts</h2><div class="sp"></div>
     <span class="lg">fewer <span class="ramp"></span> more</span></div>
     <div class="scroll" style="margin-top:8px">${ibRows.length ? `<table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
-    ${ibRows.map(k => { const tot = days.reduce((s, d) => s + (ib[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = ib[k][d] || 0; return `<td class="hc bad" style="--a:${v ? (0.18 + 0.82 * v / imax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} open issue(s)">${v || ''}</td>`; }).join('')}<td class="num">${tot}</td></tr>`; }).join('')}
-    <tr class="tot"><td>All branches</td>${ibDayTot.map((v, i) => `<td title="${days[i]}: ${v} open issues">${v || ''}</td>`).join('')}<td class="num">${ibDayTot.reduce((a, b) => a + b, 0)}</td></tr>
+    ${ibRows.map(k => { const tot = days.reduce((s, d) => s + (ib[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = ib[k][d] || 0; return `<td class="hc bad" style="--a:${v ? (0.18 + 0.82 * v / imax).toFixed(2) : 0};cursor:pointer" onclick="showIssueDay('${k}','${d}')" title="${esc(branchName(k))} · ${d}: ${v} open issue(s) — click for details">${v || ''}</td>`; }).join('')}<td class="num">${tot}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${ibDayTot.map((v, i) => `<td style="cursor:pointer" onclick="showIssueDay('ALL','${days[i]}')" title="${days[i]}: ${v} open issues — click for details">${v || ''}</td>`).join('')}<td class="num">${ibDayTot.reduce((a, b) => a + b, 0)}</td></tr>
     </tbody></table>` : `<p class="muted">No unresolved Missing OUT / broken-shift issues this month. 🎉</p>`}</div></div>
   <div class="grid three" style="margin-top:14px">
     <div class="card"><h2>Average people on shift by weekday</h2>${colChart(dowAvg, v => v.toFixed(0))}</div>
@@ -890,6 +886,32 @@ function showBranchSplits() {
   ${rows.map(x => x.branchSplit.map((a, i) => `<tr>${i === 0 ? `<td rowspan="${x.branchSplit.length}"><b>${esc(x.e.name)}</b><div class="muted">${x.e.id}</div></td><td rowspan="${x.branchSplit.length}">${esc(branchName(x.branch))}</td>` : ''}
     <td>${esc(branchName(a.branch))}</td><td class="num">${a.hrs.toFixed(1)}</td><td class="num">${(a.frac * 100).toFixed(0)}%</td><td class="num">${rs((x.base + x.ot) * a.frac)}</td></tr>`).join('')).join('')}
   </tbody></table></div>`);
+}
+function showIssueDetail(empId, punchId) {
+  const D = ST.D, e = D.emp[empId];
+  const i = D.issues.find(x => x.emp.id === empId && x.punch.punchId === punchId);
+  if (!e || !i) return;
+  openDrawer(`<div class="row"><h2 style="margin:0">${esc(e.name)}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <p class="muted" style="margin-top:4px">${empId} · ${esc(branchName(i.punch.store || e.branch))}</p>
+    <div class="note" style="margin-top:10px"><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${esc(i.kind)}</span><div style="margin-top:6px">${i.punch.type} punch · ${fmtDT_(i.punch.time)}</div></div>
+    <div class="selfie" id="sf_detail" style="margin-top:12px" onclick="thumb('detail','${i.punch.selfieId || ''}')">${i.punch.selfieId ? 'Tap to load selfie' : 'No selfie'}</div>
+    ${i.punch.reviewedBy ? `<p class="muted" style="margin-top:8px">Already reviewed by ${esc(i.punch.reviewedBy)}${i.punch.reviewNote ? ': “' + esc(i.punch.reviewNote) + '”' : ''}</p>` : ''}
+    ${!i.counted ? `<button class="btn t" style="margin-top:12px" onclick="closeDrawer();manualDialog('${empId}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>` : ''}`);
+}
+function showStaffDay(branch, date) {
+  const list = (ST._shifts || []).filter(s => (branch === 'ALL' || (s.store || s.emp.branch) === branch) && s.date === date).sort((a, b) => a.in.localeCompare(b.in));
+  openDrawer(`<div class="row"><h2 style="margin:0">${branch === 'ALL' ? 'All branches' : esc(branchName(branch))} · ${date}</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <p class="muted" style="margin-top:6px">${list.length} shift(s) · ${new Set(list.map(s => s.emp.id)).size} unique staff</p>
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Employee</th>${branch === 'ALL' ? '<th>Branch</th>' : ''}<th>IN</th><th>OUT</th><th class="num">Hours</th></tr></thead><tbody>
+    ${list.map(s => `<tr><td><b>${esc(s.emp.name)}</b> <span class="muted">${s.emp.id}</span></td>${branch === 'ALL' ? `<td>${esc(branchName(s.store || s.emp.branch))}</td>` : ''}<td>${s.in}</td><td>${s.out}</td><td class="num">${s.hours.toFixed(2)}</td></tr>`).join('') || `<tr><td colspan="${branch === 'ALL' ? 4 : 3}" class="muted">No shifts recorded</td></tr>`}
+    </tbody></table></div>`);
+}
+function showIssueDay(branch, date) {
+  const list = (ST._openIssues || []).filter(i => (branch === 'ALL' || (i.punch.store || i.emp.branch) === branch) && i.punch.time.slice(0, 10) === date);
+  openDrawer(`<div class="row"><h2 style="margin:0">${branch === 'ALL' ? 'All branches' : esc(branchName(branch))} · ${date} · open issues</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th>Employee</th>${branch === 'ALL' ? '<th>Branch</th>' : ''}<th>Problem</th><th>Punch</th></tr></thead><tbody>
+    ${list.map(i => `<tr class="click" onclick="showIssueDetail('${i.emp.id}','${i.punch.punchId}')"><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td>${branch === 'ALL' ? `<td>${esc(branchName(i.punch.store || i.emp.branch))}</td>` : ''}<td><span class="tag t-bad">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td></tr>`).join('') || `<tr><td colspan="${branch === 'ALL' ? 4 : 3}" class="muted">No open issues</td></tr>`}
+    </tbody></table></div>`);
 }
 function todayView() {
   const D = ST.D, act = D.employees.filter(e => e.status === 'Active');
@@ -929,7 +951,7 @@ function daily() {
     ${rows.sort((x, y) => (y.s.length + y.open.length) - (x.s.length + x.open.length) || x.e.branch.localeCompare(y.e.branch)).map(({ e, s, open }) => {
       const name = `<td><b>${esc(e.name)}</b> <span class="muted">${e.id}</span></td>`;
       if (s.length) return s.map(x => `<tr>${name}<td>${esc(branchName(x.store))}</td><td>${x.in}</td><td>${x.out}</td><td class="num">${x.hours.toFixed(2)}</td><td>${x.hours < D.config.halfDayHrs ? '<span class="tag t-warn">Half day</span>' : '<span class="tag t-ok">Present</span>'} ${x.imported ? '<span class="tag t-mute">from V9</span>' : [x.inPunch, x.outPunch].some(p => p.status === 'MANUAL') ? '<span class="tag t-mute">manual</span>' : ''}</td><td>${selfieBtn(x.inPunch)}</td><td>${selfieBtn(x.outPunch)}</td></tr>`).join('');
-      if (open.length) return open.map(i => `<tr>${name}<td>${esc(branchName(i.punch.store))}</td><td>${i.punch.type === 'IN' ? i.punch.time.slice(11, 16) : '—'}</td><td>${i.punch.type === 'OUT' ? i.punch.time.slice(11, 16) : '—'}</td><td class="num muted">—</td><td><span class="tag ${i.kind === 'On shift now' ? 't-ok' : 't-bad'}">${i.kind}</span></td><td>${selfieBtn(i.punch)}</td><td></td></tr>`).join('');
+      if (open.length) return open.map(i => `<tr class="click" onclick="if(event.target.tagName!=='BUTTON')showIssueDetail('${e.id}','${i.punch.punchId}')">${name}<td>${esc(branchName(i.punch.store))}</td><td>${i.punch.type === 'IN' ? i.punch.time.slice(11, 16) : '—'}</td><td>${i.punch.type === 'OUT' ? i.punch.time.slice(11, 16) : '—'}</td><td class="num muted">—</td><td><span class="tag ${i.kind === 'On shift now' ? 't-ok' : 't-bad'}">${i.kind}</span></td><td>${selfieBtn(i.punch)}</td><td></td></tr>`).join('');
       return `<tr>${name}<td>${esc(branchName(e.branch))}</td><td class="muted">—</td><td class="muted">—</td><td class="num muted">—</td><td><span class="tag t-mute">No punch</span></td><td></td><td></td></tr>`;
     }).join('')}</tbody></table></div></div>`;
 }
@@ -982,7 +1004,7 @@ function flags() {
       ${fb !== 'ALL' || fe !== 'ALL' || ff || ft ? `<button class="btn" onclick="ST.flagStore='ALL';ST.flagEmp='ALL';ST.flagFrom='';ST.flagTo='';render()">Clear filters</button>` : ''}
     </div>
     <table><thead><tr><th>Employee</th><th>Problem</th><th>Punch</th><th>Store</th><th></th></tr></thead><tbody>
-    ${issues.map(i => `<tr><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td><td>${esc(branchName(i.punch.store))}</td>
+    ${issues.map(i => `<tr class="click" onclick="if(event.target.tagName!=='BUTTON')showIssueDetail('${i.emp.id}','${i.punch.punchId}')"><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td><td>${esc(branchName(i.punch.store))}</td>
       <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${base.length ? 'None match these filters' : 'None'}</td></tr>`}
     </tbody></table>
     <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
@@ -1153,33 +1175,40 @@ async function releasePay() {
   await act({ action: 'releaseMonth', month: D.month, rows }, 'Released to staff');
 }
 async function withdrawRelease() { if (confirm(`Hide ${ST.D.monthLabel} payslips from staff again?`)) await act({ action: 'releaseMonth', month: ST.D.month, release: false }, 'Withdrawn'); }
+function branchFrac_(x, b) {
+  if (b === 'ALL') return 1;
+  if (x.branchSplit) { const a = x.branchSplit.find(a => a.branch === b); return a ? a.frac : 0; }
+  return x.e.branch === b ? 1 : 0;
+}
 function pay() {
   const D = ST.D, b = ST.branch, isAdmin = D.role === 'admin' || D.role === 'hr';
-  const R = D.pay.filter(x => (b === 'ALL' || x.e.branch === b) && (x.e.status === 'Active' || x.r.days > 0 || (D.v9[x.e.id] && Number(D.v9[x.e.id].net))));
-  const sum = k => R.reduce((s, x) => s + x.r[k], 0);
+  const R = D.pay.filter(x => branchFrac_(x, b) > 0 && (x.e.status === 'Active' || x.r.days > 0 || (D.v9[x.e.id] && Number(D.v9[x.e.id].net))));
+  const sum = k => R.reduce((s, x) => s + x.r[k] * branchFrac_(x, b), 0);
   const missing = D.issues.filter(i => i.kind === 'Missing OUT').length;
   $('#main').innerHTML = `
   ${releaseCard()}
   ${missing || D.flagged.length ? `<div class="note">${D.flagged.length} flagged punch(es) and ${missing} missing OUT(s) are <b>not</b> in these numbers yet. <a href="#" onclick="go('flags');return false">Review →</a></div>` : ''}
   <div class="grid kpis">
-    <div class="card kpi accent"><div class="l">NET payable · ${b === 'ALL' ? 'all branches' : esc(branchName(b))}</div><div class="v">${rs(sum('net'))}</div><div class="s">${esc(D.monthLabel)}</div></div>
+    <div class="card kpi accent"><div class="l">NET payable · ${b === 'ALL' ? 'all branches' : esc(branchName(b))}</div><div class="v">${rs(sum('net'))}</div><div class="s">${esc(D.monthLabel)}${b !== 'ALL' ? ' · by attendance at this branch' : ''}</div></div>
     <div class="card kpi"><div class="l">Base pay</div><div class="v">${rs(sum('base'))}</div></div>
     <div class="card kpi"><div class="l">Deductions</div><div class="v">${rs(sum('dedT'))}</div></div>
     <div class="card kpi"><div class="l">OT pay</div><div class="v">${rs(sum('otPay'))}</div></div>
     <div class="card kpi"><div class="l">Additions</div><div class="v">${rs(sum('addT'))}</div></div>
-    ${D.hasV9 ? `<div class="card kpi"><div class="l">V9 NET · same filter</div><div class="v">${rs(R.reduce((s, x) => s + (x.v9 || 0), 0))}</div><div class="s">${R.filter(x => x.v9 !== null && x.v9 === x.r.net).length} of ${R.filter(x => x.v9 !== null).length} match</div></div>` : ''}</div>
+    ${D.hasV9 ? `<div class="card kpi"><div class="l">V9 NET · same filter</div><div class="v">${rs(R.reduce((s, x) => s + (x.v9 || 0) * branchFrac_(x, b), 0))}</div><div class="s">${R.filter(x => x.v9 !== null && x.v9 === x.r.net).length} of ${R.filter(x => x.v9 !== null).length} match</div></div>` : ''}</div>
   <div class="card" style="margin-top:14px">
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Payroll · ${esc(D.monthLabel)}</h2><div class="sp"></div>
       <div style="width:200px">${branchSelect(b, "ST.branch=this.value;render()")}</div>
             <button class="btn t" onclick="exportAttendance()">Attendance CSV (V9 format)</button><button class="btn t" onclick="exportPayroll()">Payroll CSV</button>${isAdmin ? `<button class="btn" onclick="exportPayrollERP()" title="Full ERP-format payroll register, including bank details — admin/HR only">Download Payroll Sheet (.xlsx)</button><button class="btn" onclick="exportPayrollWorkbook()" title="Employee Master, Attendance, Deduction/Addition Registers, Payroll and Branch Summary/Payment Advice in one file — admin/HR only">Download Full Month Workbook (.xlsx)</button>` : ''}</div>
+    ${b !== 'ALL' ? `<p class="muted" style="margin:-4px 0 10px">Figures below are this branch's share of each person's pay, by hours actually worked here this month — not their roster branch.</p>` : ''}
     <div class="scroll"><table><thead><tr><th>WAFF ID</th><th>Name</th><th>Branch</th><th>Type</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Week-off days</th><th class="num">Base</th><th class="num">OT</th><th class="num">Deductions</th><th class="num">Additions</th><th class="num">NET</th>${D.hasV9 ? '<th class="num">V9 NET</th>' : ''}<th>Notes</th></tr></thead><tbody>
-    ${R.map(({ e, r, branchSplit: bs }) => `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${bs && bs.length > 1 ? ` <span class="tag t-mute" title="${bs.map(a => branchName(a.branch) + ' ' + (a.frac * 100).toFixed(0) + '%').join(' · ')}">split</span>` : (bs && bs[0].branch !== e.branch ? ` <span class="tag t-warn" title="Roster says ${esc(branchName(e.branch))}; attendance this month is all at ${esc(branchName(bs[0].branch))}">moved?</span>` : '')}</td><td>${e.payType}</td>
-      <td class="num">${r.days}</td><td class="num">${r.workH.toFixed(1)}</td>
+    ${R.map(x => { const { e, r, branchSplit: bs } = x; const f = branchFrac_(x, b); const net = r.net * f, base = r.base * f, ot = r.otPay * f, ded = r.dedT * f, add = r.addT * f;
+      return `<tr class="click" onclick="if(event.target.tagName!=='INPUT')showCalc('${e.id}')"><td>${e.id}</td><td><b>${esc(e.name)}</b></td><td>${esc(branchName(e.branch))}${bs && bs.length > 1 ? ` <span class="tag t-mute" title="${bs.map(a => branchName(a.branch) + ' ' + (a.frac * 100).toFixed(0) + '%').join(' · ')}">split</span>` : (bs && bs[0].branch !== e.branch ? ` <span class="tag t-warn" title="Roster says ${esc(branchName(e.branch))}; attendance this month is all at ${esc(branchName(bs[0].branch))}">moved?</span>` : '')}</td><td>${e.payType}</td>
+      <td class="num">${r.days}</td><td class="num">${(r.workH * f).toFixed(1)}</td>
       <td class="num">${r.eligible ? `<input class="mini" type="number" min="0" max="8" value="${r.creditDays}" onchange="setWO('${e.id}',this.value)" title="${r.creditSource}"> ${r.creditSource === 'rule' ? '' : '<span class="tag t-mute">manual</span>'}` : '<span class="muted">—</span>'}</td>
-      <td class="num">${rs(r.base)}</td><td class="num">${r.otPay ? rs(r.otPay) : '<span class="muted">—</span>'}</td><td class="num">${r.dedT ? rs(r.dedT) : '<span class="muted">—</span>'}</td><td class="num">${r.addT ? rs(r.addT) : '<span class="muted">—</span>'}</td>
-      <td class="num"><b style="${r.net < 0 ? 'color:var(--bad)' : ''}">${rs(r.net)}</b></td>
+      <td class="num">${rs(base)}</td><td class="num">${ot ? rs(ot) : '<span class="muted">—</span>'}</td><td class="num">${ded ? rs(ded) : '<span class="muted">—</span>'}</td><td class="num">${add ? rs(add) : '<span class="muted">—</span>'}</td>
+      <td class="num"><b style="${net < 0 ? 'color:var(--bad)' : ''}">${rs(net)}</b>${f < 1 ? ` <span class="muted" style="font-size:11px">· ${(f * 100).toFixed(0)}%</span>` : ''}</td>
       ${D.hasV9 ? `<td class="num">${x9(e.id, r.net)}</td>` : ''}
-      <td>${e.status !== 'Active' && r.days ? '<span class="tag t-bad">Inactive but worked</span>' : ''}${r.net < 0 ? '<span class="tag t-bad">Negative</span>' : ''}${!e.hasPin && e.status === 'Active' ? '<span class="tag t-mute">no PIN</span>' : ''}</td></tr>`).join('')}
+      <td>${e.status !== 'Active' && r.days ? '<span class="tag t-bad">Inactive but worked</span>' : ''}${r.net < 0 ? '<span class="tag t-bad">Negative</span>' : ''}${!e.hasPin && e.status === 'Active' ? '<span class="tag t-mute">no PIN</span>' : ''}</td></tr>`; }).join('')}
     </tbody></table></div></div>`;
 }
 function x9(id, net) {
