@@ -794,6 +794,10 @@ function monthView() {
   });
   Object.values(bm).forEach(b => b.n = b.people.size);
   const brs = Object.values(bm).filter(b => b.net || b.hrs).sort((a, b) => b.net - a.net), maxB = Math.max(1, ...brs.map(b => b.base + b.ot));
+  // Roster-branch view: the same "NET payable" the Payroll page shows for this branch — 100% of each
+  // person's pay on their home branch, no hours-worked split. Differs from bm/brs above whenever staff
+  // cover shifts outside their roster branch (brs attributes pay by where hours were actually worked).
+  const bmHome = {}; rows.forEach(x => { const h = bmHome[x.branch] = bmHome[x.branch] || { net: 0, n: 0 }; h.net += x.net; if (x.net > 0) h.n++; });
   const avgHr = T.perHr;
   const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
     return `<b>${rs(r)}</b> ${d > 12 ? `<span class="tag t-warn">▲ ${d.toFixed(0)}% above avg</span>` : d < -12 ? `<span class="tag t-ok">▼ ${(-d).toFixed(0)}% below avg</span>` : '<span class="tag t-mute">≈ avg</span>'}`; };
@@ -838,13 +842,15 @@ function monthView() {
   <div class="grid two" style="margin-top:14px">
     <div class="card"><div class="row"><h2 style="margin:0">Branches ranked by pay</h2><div class="sp"></div>
       <span class="lg"><i style="background:var(--c1)"></i>Base pay</span><span class="lg"><i style="background:var(--c2)"></i>Overtime</span></div>
-      <div class="scroll" style="margin-top:8px"><table class="rank"><thead><tr><th>Branch</th><th class="num">Staff</th><th class="num">Hours</th><th style="width:30%">Pay</th><th class="num">NET</th><th>₹ / hour</th><th class="num">OT share</th></tr></thead><tbody>
-      ${brs.map(b => `<tr class="click" onclick="ST.branch='${b.b}';go('pay')" title="${esc(branchName(b.b))}: base ${rs(b.base)} · OT ${rs(b.ot)} · deductions ${rs(b.ded)}">
+      <div class="scroll" style="margin-top:8px"><table class="rank"><thead><tr><th>Branch</th><th class="num">Staff</th><th class="num">Hours</th><th style="width:24%">Pay</th><th class="num" title="Pay attributed here by where hours were actually clocked — splits a person's pay across branches if they covered a shift elsewhere">NET · hours worked</th><th class="num" title="Full NET for everyone whose roster branch is this one, no splitting — matches the Payroll page's NET payable for this branch">NET · payable</th><th>₹ / hour</th><th class="num">OT share</th></tr></thead><tbody>
+      ${brs.map(b => { const h = bmHome[b.b]; const diff = h ? Math.abs(b.net - h.net) : 0; const diffPct = h && h.net ? diff / h.net * 100 : 0; return `<tr class="click" onclick="ST.branch='${b.b}';go('pay')" title="${esc(branchName(b.b))}: base ${rs(b.base)} · OT ${rs(b.ot)} · deductions ${rs(b.ded)}">
         <td><b>${esc(branchName(b.b))}</b></td><td class="num">${b.n}</td><td class="num">${Math.round(b.hrs).toLocaleString('en-IN')}</td>
         <td><div class="sbar"><i style="width:${(b.base / maxB * 100).toFixed(1)}%;background:var(--c1)"></i>${b.ot ? `<i style="width:${(b.ot / maxB * 100).toFixed(1)}%;background:var(--c2)"></i>` : ''}</div></td>
-        <td class="num"><b>${rs(b.net)}</b></td><td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`).join('')}
+        <td class="num"><b>${rs(b.net)}</b></td>
+        <td class="num">${h ? `<b>${rs(h.net)}</b> <span class="muted" style="font-size:11px">· ${h.n}</span>${diffPct >= 10 ? ` <span class="tag t-warn" title="Differs from the hours-worked figure by ${rs(diff)}">±${diffPct.toFixed(0)}%</span>` : ''}` : '<span class="muted">—</span>'}</td>
+        <td>${hrTag(b)}</td><td class="num">${otTag(b)}</td></tr>`; }).join('')}
       </tbody></table></div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime.${splitPeople.length ? ` <a href="#" onclick="showBranchSplits();return false">${splitPeople.length} covered a shortage elsewhere — pay split by hours worked →</a>` : ''}</p></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Outlet average ${rs(avgHr)} per hour worked. Amber = noticeably costlier per hour than the average; red OT share = 10%+ of the branch's pay is overtime. "NET · hours worked" and "NET · payable" differ whenever staff cover shifts outside their roster branch — a large gap (±10%+, flagged) is worth a look.${splitPeople.length ? ` <a href="#" onclick="showBranchSplits();return false">${splitPeople.length} covered a shortage elsewhere — pay split by hours worked →</a>` : ''}</p></div>
     <div class="grid" style="align-content:start">
       <div class="card"><h2>Pay by month</h2>${trend.length > 1 ? colChart(trend, lakh) : `<p class="muted">Only one month of data so far.</p>${colChart(trend, lakh)}`}</div>
       <div class="card"><h2>Hours worked by month</h2>${colChart(trendH, v => Math.round(v).toLocaleString('en-IN'))}</div>
