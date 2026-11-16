@@ -797,7 +797,7 @@ function monthView() {
   // Roster-branch view: the same "NET payable" the Payroll page shows for this branch — 100% of each
   // person's pay on their home branch, no hours-worked split. Differs from bm/brs above whenever staff
   // cover shifts outside their roster branch (brs attributes pay by where hours were actually worked).
-  const bmHome = {}; rows.forEach(x => { const h = bmHome[x.branch] = bmHome[x.branch] || { net: 0, n: 0 }; h.net += x.net; if (x.net > 0) h.n++; });
+  const bmHome = {}; rows.forEach(x => { const h = bmHome[x.e.branch] = bmHome[x.e.branch] || { net: 0, n: 0 }; h.net += x.net; if (x.net > 0) h.n++; });
   const avgHr = T.perHr;
   const hrTag = b => { if (b.b === 'MGR' || !b.hrs) return '<span class="muted">—</span>'; const r = b.net / b.hrs, d = (r - avgHr) / avgHr * 100;
     return `<b>${rs(r)}</b> ${d > 12 ? `<span class="tag t-warn">▲ ${d.toFixed(0)}% above avg</span>` : d < -12 ? `<span class="tag t-ok">▼ ${(-d).toFixed(0)}% below avg</span>` : '<span class="tag t-mute">≈ avg</span>'}`; };
@@ -1416,7 +1416,7 @@ function reqs() {
   const body = r => { let d = {}; try { d = JSON.parse(r.data); } catch (x) {} const e = D.emp[r.empId] || {};
     if (r.kind === 'CORRECTION') return `<b>Missing or wrong punch</b> · ${fmtD_(d.date)} · ${esc(d.inT)}–${esc(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
     if (r.kind === 'MISSED_PUNCHOUT') return `<b>Missed punch-out</b> · ${fmtD_(d.date)} · clocked in ${ampm_(String(d.inTime).slice(11, 16))}, says they left ${ampm_(d.outT)}<div class="muted">“${esc(d.reason)}”</div>`;
-    if (r.kind === 'FACE_RESET') return `<b>Face photo isn't matching</b><div class="muted">“${esc(d.reason)}”</div><p class="muted" style="margin-top:4px">Approving clears their stored photo — they self-enroll again on their next punch, through the quality-gated capture.</p>`;
+    if (r.kind === 'FACE_RESET') return `<b>Face photo isn't matching</b><div class="muted">“${esc(d.reason)}”</div><p class="muted" style="margin-top:4px">Approving clears their stored photo — they self-enroll again on their next punch. That re-enrollment uses the same single-frame capture as before, so if the mismatch keeps recurring for this person, re-enroll them yourself from Employees → Edit instead of relying on another self-enroll.</p>`;
     if (r.kind === 'PETTY_CASH') return `<b>Petty cash · ₹${esc(d.amount)} · ${esc(d.category)}</b> · ${esc(branchName(d.store))} · ${fmtD_(d.date)}<div class="muted">“${esc(d.note)}”</div>
       <div class="row" style="margin-top:6px">${(d.photoIds || []).map((id, i) => `<button class="btn" style="padding:3px 9px" onclick="viewSelfie('${id}','${esc(r.name)} — invoice ${i + 1}')">Invoice ${i + 1}</button>`).join('')}</div>`;
     return `<b>Update details</b><table style="margin-top:6px"><tbody>${Object.keys(d).map(k => `<tr><td class="muted">${REQ_F[k] || k}</td><td>${esc(e[k] || '—')}</td><td>→</td><td><b>${esc(d[k])}</b></td></tr>`).join('')}</tbody></table>`; };
