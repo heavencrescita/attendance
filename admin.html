@@ -40,7 +40,7 @@ main{max-width:1280px;margin:0 auto;padding:20px}
 .col i{display:block;width:70%;max-width:46px;background:var(--c1);border-radius:4px 4px 0 0}.col.on i{background:var(--c2)}.col.ghost i{opacity:.45}.col:hover i{filter:brightness(1.12)}
 .col .cv{font-size:11px;color:var(--ink);font-weight:600;margin-bottom:3px;white-space:nowrap}.col .ck{font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap;height:14px}
 .heat{border-collapse:separate;border-spacing:2px}.heat th,.heat td{padding:0;border:0;text-align:center;font-size:11px}.heat th{font-weight:600;line-height:1.15;padding:2px 0;min-width:24px}.heat th span{font-weight:400;color:var(--muted)}.heat th.we{color:var(--c2)}
-.heat td:first-child,.heat th:first-child{text-align:left;padding-right:10px;font-size:12.5px}.heat td.hc{width:24px;height:24px;border-radius:4px;background:rgba(26,159,160,var(--a));color:var(--ink)}
+.heat td:first-child,.heat th:first-child{text-align:left;padding-right:10px;font-size:12.5px}.heat td.hc{width:24px;height:24px;border-radius:4px;background:rgba(26,159,160,var(--a));color:var(--ink)}.heat td.hc.bad{background:rgba(180,35,43,var(--a))}
 .heat tr.tot td{color:var(--muted);font-weight:600;padding-top:4px}.heat td.num{padding-left:8px}
 
 .two{grid-template-columns:1.4fr 1fr}@media(max-width:900px){.two{grid-template-columns:1fr}}
@@ -802,10 +802,16 @@ function monthView() {
   const shifts = []; D.employees.forEach(e => (D.byEmp[e.id].inMonth || []).forEach(s => { if (periodOf(s.date) === D.month && s.hours > 0) shifts.push(Object.assign({ emp: e }, s)); }));
   const prD = D.periodStart && D.periodEnd ? { startDate: D.periodStart, endDate: D.periodEnd } : periodRange(D.month);
   const days = []; for (let d = prD.startDate; d <= prD.endDate; d = addDay(d)) days.push(d);
-  const hb = {}; shifts.forEach(s => { const k = s.store || s.emp.branch; (hb[k] = hb[k] || {})[s.date] = (hb[k][s.date] || 0) + 1; });
+  const hb = {}; shifts.forEach(s => { const k = s.store || s.emp.branch; const byDate = (hb[k] = hb[k] || {}); (byDate[s.date] = byDate[s.date] || new Set()).add(s.emp.id); });
   const hbRows = Object.keys(hb).sort((a, b) => branchName(a).localeCompare(branchName(b)));
-  const hmax = Math.max(1, ...hbRows.flatMap(k => Object.values(hb[k])));
-  const dayTot = days.map(d => shifts.filter(s => s.date === d).length);
+  const hmax = Math.max(1, ...hbRows.flatMap(k => Object.values(hb[k]).map(set => set.size)));
+  const dayTot = days.map(d => new Set(shifts.filter(s => s.date === d).map(s => s.emp.id)).size);
+  // open issues by day — unresolved Missing-OUT / OUT-without-IN punches (never "On shift now", never already reviewed)
+  const openIssues = (D.issues || []).filter(i => i.kind !== 'On shift now' && !(i.punch.reviewedBy || i.punch.reviewNote) && i.punch.time.slice(0, 10) >= prD.startDate && i.punch.time.slice(0, 10) <= prD.endDate);
+  const ib = {}; openIssues.forEach(i => { const k = i.punch.store || i.emp.branch; const d = i.punch.time.slice(0, 10); (ib[k] = ib[k] || {})[d] = (ib[k][d] || 0) + 1; });
+  const ibRows = Object.keys(ib).sort((a, b) => branchName(a).localeCompare(branchName(b)));
+  const imax = Math.max(1, ...ibRows.flatMap(k => Object.values(ib[k])));
+  const ibDayTot = days.map(d => openIssues.filter(i => i.punch.time.slice(0, 10) === d).length);
   const wd = d => new Date(d + 'T12:00:00+05:30').getDay();
   const dowAvg = [1, 2, 3, 4, 5, 6, 0].map(w => { const ds = days.filter(d => wd(d) === w), v = ds.reduce((s, d, i) => s + dayTot[days.indexOf(d)], 0) / Math.max(1, ds.length); return { label: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w], v }; });
   const starts = Array.from({ length: 24 }, (_, h) => ({ label: h % 3 === 0 ? String(h).padStart(2, '0') : '', v: shifts.filter(s => Number(String(s.in).slice(0, 2)) === h).length, title: '' }))
@@ -847,9 +853,15 @@ function monthView() {
   <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Staffing calendar · people on shift each day</h2><div class="sp"></div>
     <span class="lg">fewer <span class="ramp"></span> more</span></div>
     <div class="scroll" style="margin-top:8px"><table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Avg/day</th></tr></thead><tbody>
-    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] || 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} on shift">${v || ''}</td>`; }).join('')}<td class="num">${(tot / days.length).toFixed(1)}</td></tr>`; }).join('')}
-    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} shifts">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / days.length).toFixed(1)}</td></tr>
+    ${hbRows.map(k => { const tot = days.reduce((s, d) => s + (hb[k][d] ? hb[k][d].size : 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = hb[k][d] ? hb[k][d].size : 0; return `<td class="hc" style="--a:${v ? (0.18 + 0.82 * v / hmax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} staff worked">${v || ''}</td>`; }).join('')}<td class="num">${(tot / days.length).toFixed(1)}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${dayTot.map((v, i) => `<td title="${days[i]}: ${v} staff worked">${v}</td>`).join('')}<td class="num">${(dayTot.reduce((a, b) => a + b, 0) / days.length).toFixed(1)}</td></tr>
     </tbody></table></div></div>
+  <div class="card" style="margin-top:14px"><div class="row"><h2 style="margin:0">Open issues by day · unresolved Missing OUT / broken shifts</h2><div class="sp"></div>
+    <span class="lg">fewer <span class="ramp"></span> more</span></div>
+    <div class="scroll" style="margin-top:8px">${ibRows.length ? `<table class="heat"><thead><tr><th>Branch</th>${days.map(d => `<th class="${[0, 6].includes(wd(d)) ? 'we' : ''}">${Number(d.slice(8))}<br><span>${'SMTWTFS'[wd(d)]}</span></th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+    ${ibRows.map(k => { const tot = days.reduce((s, d) => s + (ib[k][d] || 0), 0); return `<tr><td><b>${esc(branchName(k))}</b></td>${days.map(d => { const v = ib[k][d] || 0; return `<td class="hc bad" style="--a:${v ? (0.18 + 0.82 * v / imax).toFixed(2) : 0}" title="${esc(branchName(k))} · ${d}: ${v} open issue(s)">${v || ''}</td>`; }).join('')}<td class="num">${tot}</td></tr>`; }).join('')}
+    <tr class="tot"><td>All branches</td>${ibDayTot.map((v, i) => `<td title="${days[i]}: ${v} open issues">${v || ''}</td>`).join('')}<td class="num">${ibDayTot.reduce((a, b) => a + b, 0)}</td></tr>
+    </tbody></table>` : `<p class="muted">No unresolved Missing OUT / broken-shift issues this month. 🎉</p>`}</div></div>
   <div class="grid three" style="margin-top:14px">
     <div class="card"><h2>Average people on shift by weekday</h2>${colChart(dowAvg, v => v.toFixed(0))}</div>
     <div class="card"><h2>When shifts start</h2>${colChart(starts, v => '', { noLabels: true })}<p class="muted" style="font-size:12px;margin:6px 0 0">Hover a bar for the count. Busiest start: <b>${String(starts.reduce((m, x, h) => x.v > starts[m].v ? h : m, 0)).padStart(2, '0')}:00</b></p></div>
