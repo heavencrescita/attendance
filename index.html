@@ -328,19 +328,35 @@ function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classLi
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 function fmtTime(iso) { return iso ? iso.slice(11, 16) : ''; }
 function fmtDay(iso) { const d = new Date(iso); return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
+function parseApiJson(txt) {
+  // Some networks (seen on slow/2G mobile connections, likely carrier-side proxy
+  // injection) hand back a short extra token glued onto the front of an otherwise
+  // valid JSON response — e.g. "true{...real json...}". JSON.parse on the whole
+  // string then fails with "Unexpected non-whitespace character after JSON at
+  // position N": that message means a COMPLETE, valid JSON value parsed first and
+  // something else follows it — the real payload may be sitting right after that
+  // leading junk, not lost. Recover it by re-parsing from the reported break point.
+  try { return JSON.parse(txt); }
+  catch (e) {
+    const m = /after JSON at position (\d+)/.exec(e.message);
+    if (m) {
+      const rest = txt.slice(Number(m[1])).trim();
+      if (rest) { try { return JSON.parse(rest); } catch (e2) {} }
+    }
+    throw new Error('BAD_JSON: ' + e.message);
+  }
+}
 async function apiOnce(body) {
   const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });   // text/plain → no CORS preflight
   const txt = await r.text();
-  let j;
-  try { j = JSON.parse(txt); }
-  catch (e) { throw new Error('BAD_JSON: ' + e.message); }
+  const j = parseApiJson(txt);
   if (!j.ok) throw new Error(j.error || 'Something went wrong');
   return j;
 }
 async function api(body) {
-  // Mobile networks occasionally hand back a truncated/garbled body (mid-response
-  // retry, proxy buffering, etc). A JSON.parse failure is almost always transient,
-  // so retry once silently before surfacing an error to the user.
+  // A JSON.parse failure that parseApiJson couldn't recover from is almost always
+  // transient (mid-response retry, proxy buffering, etc) — retry once silently
+  // before surfacing an error to the user.
   try { return await apiOnce(body); }
   catch (e) {
     if (String(e.message).startsWith('BAD_JSON')) {
