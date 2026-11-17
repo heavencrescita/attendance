@@ -215,7 +215,7 @@ function calcPay(e, shifts, ctx) {
   const ruleCredit = eligible ? Math.min(woMax, days >= workDays ? woMax : Math.floor((days + 1) / 7)) : 0;
   const pr = periodRange(ctx.month);
   const plannedWO = ctx.plannerShifts ? weekOffDaysFromPlanner(ctx.plannerShifts, e.id, pr) : 0;
-  const hasPlannerData = ctx.plannerShifts && (ctx.plannerShifts || []).some(s => s.empId === e.id && s.type === 'WEEKOFF' && s.date >= pr.startDate && s.date <= pr.endDate);
+  const hasPlannerData = ctx.plannerShifts && (ctx.plannerShifts || []).some(s => s.empId === e.id && s.type === 'WEEKOFF' && s.status === 'ACCEPTED' && s.date >= pr.startDate && s.date <= pr.endDate);
   const creditDays = hasPlannerData ? plannedWO : (wo ? Number(wo.days) : ruleCredit);
   const creditSource = hasPlannerData ? 'planned (' + plannedWO + ' days)' : wo ? 'set by ' + wo.setBy : (eligible ? 'rule' : 'not eligible');
   const creditH = creditDays * duty;
