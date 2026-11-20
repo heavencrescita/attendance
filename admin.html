@@ -618,7 +618,9 @@ function shiftPlan() {
   const resTag = r => r.res === 'Late' ? `<span class="tag t-bad">Late ${r.late} min</span>` : r.res === 'Very late' ? `<span class="tag t-warn">Very late (${(r.late / 60).toFixed(1)} h) — check</span>` : r.res === 'No-show' ? '<span class="tag t-bad">No-show</span>' : r.res === 'On time' ? '<span class="tag t-ok">On time</span>' : `<span class="tag t-mute">${r.res}</span>`;
   const filt = { ALL: () => true, REJECTED: r => r.s.status === 'REJECTED', PENDING: r => r.s.status === 'PENDING', LATE: r => r.res === 'Late' || r.res === 'Very late', NOSHOW: r => r.res === 'No-show' }[f];
   const stores = [...new Set(D.plan.rows.map(r => r.s.store))].sort((x, y) => branchName(x).localeCompare(branchName(y)));
-  const planEmps = D.employees.filter(e => storeRows.some(r => r.s.empId === e.id)).sort((a, b2) => a.name.localeCompare(b2.name));
+  // every employee who could plausibly appear here, not only those with a shift already planned — otherwise a manager or anyone
+  // else whose shift for this store/period isn't entered yet (or at all) silently drops out of the "All employees" filter
+  const planEmps = D.employees.filter(e => e.status === 'Active' && (b === 'ALL' || e.branch === b || storeRows.some(r => r.s.empId === e.id))).sort((a, b2) => a.name.localeCompare(b2.name));
   const un = D.plan.unplanned.filter(p => b === 'ALL' || p.store === b);
   const mgrs = D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active');
   $('#main').innerHTML = `<div class="card">

@@ -644,9 +644,11 @@ function editShift(shiftId, day) {
   const last = JSON.parse(localStorageGet('bwcLastTimes') || '{"start":"09:00","end":"18:00"}');
   const days = []; for (let i = 0; i < 7; i++) { const d = addD(P.from, i); if (d >= P.data.today) days.push(d); }
   const type = s ? (s.type || 'WORK') : 'WORK';
+  const defLoc = s ? s.store : st;
   const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'ov';
   ov.innerHTML = `<div class="sheet"><h2>${s ? 'Edit shift' : 'Add shift'}</h2>
-    <label>Employee</label><select id="f-emp" onchange="clashCheck()"><option value="">Choose…</option><optgroup label="This store">${here.map(opt).join('')}</optgroup><optgroup label="Other stores">${other.map(e => opt(e).replace('</option>', ' · ' + esc(e.branchName) + '</option>')).join('')}</optgroup></select>
+    <label>Employee</label><select id="f-emp" onchange="onEmpChange()"><option value="">Choose…</option><optgroup label="This store">${here.map(opt).join('')}</optgroup><optgroup label="Other stores">${other.map(e => opt(e).replace('</option>', ' · ' + esc(e.branchName) + '</option>')).join('')}</optgroup></select>
+    <label>Location <span>the store this shift is at — defaults to the employee's own store, change it to plan a cover shift elsewhere</span></label><select id="f-loc" onchange="clashCheck()">${M.planStores.map(st2 => `<option value="${st2.code}" ${st2.code === defLoc ? 'selected' : ''}>${esc(st2.name)}</option>`).join('')}</select>
     <label>Type</label><select id="f-type" onchange="toggleShiftType();clashCheck()">
       <option value="WORK" ${type === 'WORK' ? 'selected' : ''}>Work shift</option>
       <option value="WEEKOFF" ${type === 'WEEKOFF' ? 'selected' : ''}>Week off (paid)</option>
@@ -665,6 +667,11 @@ function editShift(shiftId, day) {
   document.body.appendChild(ov); clashCheck();
 }
 function toggleShiftType() { $('f-times').style.display = $('f-type').value === 'WORK' ? '' : 'none'; $('f-dur').textContent = ''; }
+function onEmpChange() {   // picking the employee defaults Location to their own mapped store (still editable) when that store is one of yours
+  const e = P.data.employees.find(x => x.id === $('f-emp').value);
+  if (e && [...$('f-loc').options].some(o => o.value === e.branch)) $('f-loc').value = e.branch;
+  clashCheck();
+}
 function localStorageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 const mins = t => { const m = /^(\d\d):(\d\d)$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
@@ -690,8 +697,9 @@ async function saveShift(shiftId) {
   err('e-f'); const emp = $('f-emp').value, type = $('f-type').value, note = $('f-note').value.trim();
   const start = type === 'WORK' ? $('f-start').value : '', end = type === 'WORK' ? $('f-end').value : '';
   const days = [...document.querySelectorAll('.dchk input')].filter(x => x.checked).map(x => x.value);
-  if (!emp) return err('e-f', 'Choose the employee'); if (type === 'WORK' && (!start || !end)) return err('e-f', 'Enter start and end time'); if (!days.length) return err('e-f', 'Tick at least one day');
-  const store = $('p-store').value; $('f-save').disabled = true;
+  const store = $('f-loc').value;
+  if (!emp) return err('e-f', 'Choose the employee'); if (!store) return err('e-f', 'Choose the location'); if (type === 'WORK' && (!start || !end)) return err('e-f', 'Enter start and end time'); if (!days.length) return err('e-f', 'Tick at least one day');
+  $('f-save').disabled = true;
   try {
     await api({ action: 'planSave', id: M.id, pin: M.pin, shifts: days.map(date => ({ shiftId: shiftId || undefined, store, empId: emp, date, type, start, end, note })) });
     if (type === 'WORK') localStorageSet('bwcLastTimes', JSON.stringify({ start, end }));
