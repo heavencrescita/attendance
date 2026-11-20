@@ -528,7 +528,7 @@ function showResult(r) {
   const ok = r.status === 'ACCEPTED';
   $('resbox').className = 'card result ' + (ok ? 'okc' : 'warnc');
   $('r-icon').textContent = ok ? '✅' : '🕓';
-  $('r-title').textContent = `${r.type === 'IN' ? 'Punch IN' : 'Punch OUT'} · ${fmtTime(r.time)}`;
+  $('r-title').textContent = `${S.name || ''} · ${r.type === 'IN' ? 'Punch IN' : 'Punch OUT'} · ${fmtDay(r.time)}, ${fmtTime(r.time)}`;
   $('r-sub').innerHTML = ok ? 'Recorded · பதிவு செய்யப்பட்டது' : 'Recorded, sent to your manager for review<br>மேலாளர் சரிபார்ப்புக்கு அனுப்பப்பட்டது';
   $('r-detail').textContent = (r.duplicate ? 'Already recorded a moment ago. ' : '') + (r.store ? r.store + (r.distanceM != null ? ` · ${r.distanceM} m away` : '') : '') + (ok ? '' : (r.reason ? ' · ' + r.reason : ''));
   show('s-result');
