@@ -1464,7 +1464,10 @@ function reqs() {
   <div class="card" style="margin-top:14px"><h2>Face re-enrollment cleanup</h2>
     <p class="muted" style="margin-top:-6px">Before today, an employee's first punch auto-saved whatever face the camera happened to see — no steady-frame or quality check. Anyone enrolled that way (tag: “self, first punch”) may now be failing the match check on every punch with a face that just doesn't agree with its own bad reference. This clears those references only — never a photo a manager captured through “Enroll face photo” — so the employee simply self-enrolls again on their next punch, this time through the new quality-gated capture. No camera, no admin visit needed per person.</p>
     <button class="btn" onclick="checkBadFace()">Check how many are affected</button> <span id="bfOut" class="muted"></span>
-    <div id="bfList"></div></div>` : ''}`;
+    <div id="bfList"></div></div>${D.role === 'hr' ? `<div class="card" style="margin-top:14px"><h2>Employee concerns</h2>
+    <p class="muted" style="margin-top:-6px">Submitted through My BWC's AI intake chat. Only you see these — the employee saw and confirmed the summary before it was sent.</p>
+    <div id="cplist"><p class="muted">Loading…</p></div></div>` : ''}` : ''}`;
+  if (D.role === 'hr') loadComplaints();
 }
 async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
 async function checkBadFace() {
@@ -1478,6 +1481,35 @@ async function applyClearBadFace(n) {
   if (!confirm(`Clear the stored face photo for ${n} employee(s)? They'll self-enroll again on their next punch. This can't be undone, but re-enrollment takes seconds.`)) return;
   const r = await act({ action: 'clearBadFaceEnrollments', apply: true }, 'Cleared — affected employees will self-enroll on next punch');
   $('#bfOut').textContent = `Cleared ${r.count} employee(s).`; $('#bfList').innerHTML = '';
+}
+function transcriptView_(raw) {
+  let turns = []; try { turns = JSON.parse(raw || '[]'); } catch (e) {}
+  return turns.map(t => {
+    if (t.role === 'user') return `<div style="margin:5px 0;padding:8px 11px;border-radius:10px;background:var(--chip)"><b style="font-size:12px;color:var(--muted)">Employee</b><br>${esc(t.content)}</div>`;
+    let text = t.content; try { const j = JSON.parse(t.content); if (j && typeof j.text === 'string') text = j.text; } catch (e) {}
+    return `<div style="margin:5px 0;padding:8px 11px;border-radius:10px;border:1px solid var(--line)"><b style="font-size:12px;color:var(--muted)">Assistant</b><br>${esc(text)}</div>`;
+  }).join('');
+}
+async function loadComplaints() {
+  const box = $('#cplist'); if (!box) return;
+  let r; try { r = await api({ action: 'complaints' }); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+  const open = r.complaints.filter(c => c.status === 'OPEN'), done = r.complaints.filter(c => c.status !== 'OPEN');
+  const urg = u => u === 'High' ? '<span class="tag t-bad">High urgency</span>' : u === 'Low' ? '<span class="tag t-mute">Low urgency</span>' : '<span class="tag t-warn">Medium urgency</span>';
+  const card = c => `<div class="card" style="margin-top:10px"><div class="row"><div><b>${esc(c.name)}</b> <span class="muted">${c.empId} · ${fmtDT_(c.createdAt)}</span></div><div class="sp"></div>
+      <span class="tag t-mute">${esc(c.category)}</span> ${urg(c.urgency)}</div>
+    <p style="margin:8px 0 4px">${esc(c.summary)}</p>
+    <table style="margin-top:4px"><tbody><tr><td class="muted" style="width:140px">People involved</td><td>${esc(c.peopleInvolved || '—')}</td></tr><tr><td class="muted">Wants</td><td>${esc(c.desiredOutcome || '—')}</td></tr></tbody></table>
+    <details style="margin-top:8px"><summary class="muted" style="cursor:pointer">View conversation</summary><div style="margin-top:8px">${transcriptView_(c.transcript)}</div></details>
+    ${c.status === 'OPEN'
+      ? `<div class="row" style="margin-top:10px"><input type="text" id="cn-${c.complaintId}" placeholder="Note (optional, visible to you only)" style="flex:1"><button class="btn g" onclick="resolveComplaintUI('${c.complaintId}')">Mark resolved</button></div>`
+      : `<p class="muted" style="margin-top:8px">Resolved ${fmtDT_(c.resolvedAt)} by ${esc(c.resolvedBy)}${c.resolutionNote ? ' — “' + esc(c.resolutionNote) + '”' : ''}</p>`}</div>`;
+  box.innerHTML = (open.length ? open.map(card).join('') : '<p class="muted">Nothing open right now.</p>')
+    + (done.length ? `<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Resolved (${done.length})</summary>${done.map(card).join('')}</details>` : '');
+}
+async function resolveComplaintUI(id) {
+  const note = ($('#cn-' + id) || {}).value || '';
+  await act({ action: 'resolveComplaint', complaintId: id, note }, 'Marked resolved');
+  loadComplaints();
 }
 async function decide(id, decision) { await act({ action: 'reviewRequest', requestId: id, decision, note: ($('#rn-' + id) || {}).value || '' }, decision === 'APPROVE' ? 'Approved' : 'Rejected'); }
 async function bulkApproveFaceResets(n) {

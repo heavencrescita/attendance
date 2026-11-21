@@ -156,6 +156,21 @@ dl.kv dd{margin:0;font-weight:700;text-align:right;word-break:break-word}
 .req:first-child{border-top:0}
 .req .tag{align-self:flex-start;flex:none}
 
+/* ---------- report a concern (AI chat) ---------- */
+.cpanel{padding-bottom:10px}
+.cchat{display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow-y:auto;padding:4px 2px;margin:10px 0}
+.cbub{max-width:85%;padding:10px 13px;border-radius:16px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.cbub.cbot{background:var(--well);color:var(--ink);align-self:flex-start;border-bottom-left-radius:4px}
+.cbub.cme{background:linear-gradient(180deg,#f0bb55,#d9982c);color:#2a1a14;align-self:flex-end;border-bottom-right-radius:4px;font-weight:600}
+.cbub.cload{color:var(--muted);font-style:italic}
+.csum{background:var(--well);border-radius:16px;padding:14px;margin-top:4px}
+.csum .sec{font-size:12.5px;font-weight:800;color:var(--gold-t);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.crow{display:flex;gap:8px;align-items:center;margin-top:10px}
+.crow input{flex:1;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:11px 13px;font-size:15px}
+.cmic{padding:11px 13px;font-size:18px;flex:none}
+.cmic.on{background:var(--bad-bg);color:var(--bad);animation:cpulse 1s ease-in-out infinite}
+@keyframes cpulse{0%,100%{opacity:1}50%{opacity:.55}}
+
 /* ---------- tab bar ---------- */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(10px);border-top:1px solid var(--line);
   padding:6px 8px calc(6px + env(safe-area-inset-bottom));display:flex;justify-content:center;z-index:20}
@@ -349,7 +364,7 @@ const monLbl = m => MN[Number(m.slice(5)) - 1] + ' ' + m.slice(0, 4);
 const todayIST = () => new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
 const addDay = ymd => new Date(new Date(ymd + 'T12:00:00+05:30').getTime() + 86400000).toISOString().slice(0, 10);
 const dayLbl = ymd => { const d = new Date(ymd + 'T12:00:00'); return DN[d.getDay()] + ', ' + d.getDate() + ' ' + MN[d.getMonth()].slice(0, 3); };
-let U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [] };
+let U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [], cx: null };
 
 async function api(body) {
   const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) });
@@ -366,7 +381,7 @@ async function signIn() {
   catch (e) { lerr(e.message); U.pin = ''; }
   finally { $('b-login').disabled = false; $('b-login').textContent = 'Sign in'; }
 }
-function signOut() { U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [] }; $('pin').value = ''; $('app').classList.add('hide'); $('login').classList.remove('hide'); closeSheet(); window.scrollTo(0, 0); }
+function signOut() { U = { id: '', pin: '', D: null, tab: 'home', sel: null, sh: { open: null, mode: '' }, shifts: [], cx: null }; $('pin').value = ''; $('app').classList.add('hide'); $('login').classList.remove('hide'); closeSheet(); window.scrollTo(0, 0); }
 
 async function load(month) {
   if (U.D) $('main').innerHTML = '<div class="skeleton"></div>';
@@ -419,9 +434,9 @@ function render() {
   else { const L = D.lastPaid; $('st-ot').textContent = L ? rs(L.net) : '—'; $('sl-ot').textContent = L ? 'paid for ' + MN[Number(L.month.slice(5)) - 1].slice(0, 3) : 'no payslips yet'; }
   const pend = U.shifts.filter(s => s.status === 'PENDING' && s.canAnswer).length;
   const tabs = [['home', 'Overview', 'M3 10.5 12 3l9 7.5V21H3z'], ['att', 'Attendance', 'M4 4h16v16H4zM4 9h16M9 4v16M14 4v16'], ['pay', 'Pay', 'M3 6h18v12H3zM3 10h18M7 15h4'],
-    ['shifts', 'Shifts', 'M12 7v5l3 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z', pend], ['me', 'My details', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6']];
+    ['shifts', 'Shifts', 'M12 7v5l3 2M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18z', pend], ['concern', 'Report', 'M4 4h16v12H8l-4 4z'], ['me', 'My details', 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6']];
   $('tabs').innerHTML = tabs.map(([k, l, d, n]) => `<button class="${U.tab === k ? 'on' : ''}" onclick="go('${k}')" aria-current="${U.tab === k ? 'page' : 'false'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="${d}"/></svg>${l}${n ? `<span class="dotn">${n}</span>` : ''}</button>`).join('');
-  ({ home, att, pay, shifts: shiftsTab, me })[U.tab]();
+  ({ home, att, pay, shifts: shiftsTab, me, concern })[U.tab]();
 }
 function go(t) { U.tab = t; render(); window.scrollTo({ top: t === 'home' ? 0 : $('main').offsetTop - 10, behavior: 'smooth' }); }
 
@@ -560,6 +575,83 @@ async function answer(id, ans) {
   if (ans === 'REJECT' && fb.length < 3) { eb.textContent = 'Write a short reason so your manager can plan around it.'; return eb.classList.remove('hide'); }
   try { const r = await api({ action: 'staffRespond', id: U.id, pin: U.pin, shiftId: id, answer: ans, feedback: fb }); const s = U.shifts.find(x => x.shiftId === id); s.status = r.status; s.feedback = fb; U.sh = { open: null, mode: '' }; render(); }
   catch (e) { eb.textContent = e.message; eb.classList.remove('hide'); }
+}
+
+/* ---------- report a concern (AI intake chat) ---------- */
+const CONCERN_GREETING = "Hi, I’m here to help you report a concern privately to Sarah. Take your time — what happened?";
+function startConcern() {
+  U.cx = { history: [{ role: 'assistant', content: JSON.stringify({ type: 'question', text: CONCERN_GREETING }) }],
+    messages: [{ who: 'bot', text: CONCERN_GREETING }], summary: null, busy: false, submitted: null };
+  render();
+}
+function concern() {
+  if (!U.cx) {
+    $('main').innerHTML = `<div class="panel"><h2>Report a concern</h2>
+      <p class="lead">Talk it through here first — a few questions, then a summary for you to check before anything is sent. Only Sarah ever sees it. <span class="ta">உங்கள் பிரச்சனையை இங்கே பகிரலாம்</span></p>
+      <button class="btn btn-syrup" onclick="startConcern()">Start</button></div>`;
+    return;
+  }
+  if (U.cx.submitted) {
+    $('main').innerHTML = `<div class="panel"><h2>Sent to Sarah</h2>
+      <p class="lead">She'll follow up with you directly. Reference: ${esc(U.cx.submitted)}</p>
+      <button class="btn btn-ghost" onclick="U.cx=null;render()">Done</button></div>`;
+    return;
+  }
+  const bubbles = U.cx.messages.map(m => `<div class="cbub ${m.who === 'me' ? 'cme' : 'cbot'}">${esc(m.text)}</div>`).join('');
+  const s = U.cx.summary;
+  const sum = s ? `<div class="csum"><div class="sec">Here's what will go to Sarah</div>
+    <dl class="kv"><dt>Category</dt><dd>${esc(s.category)}</dd><dt>Urgency</dt><dd>${esc(s.urgency)}</dd>
+      <dt>What happened</dt><dd>${esc(s.description)}</dd><dt>People involved</dt><dd>${esc(s.peopleInvolved)}</dd>
+      <dt>What you want to happen</dt><dd>${esc(s.desiredOutcome)}</dd></dl>
+    <div class="row" style="margin-top:10px"><button class="btn btn-syrup" onclick="submitConcern()" ${U.cx.busy ? 'disabled' : ''}>Send to Sarah</button>
+      <button class="btn btn-quiet" onclick="U.cx.summary=null;render()">Keep talking instead</button></div></div>` : '';
+  $('main').innerHTML = `<div class="panel cpanel"><div class="row"><h2 style="margin:0">Report a concern</h2><div class="sp"></div><button class="btn btn-quiet" onclick="U.cx=null;render()">Cancel</button></div>
+    <div class="cchat" id="cchat">${bubbles}${U.cx.busy ? '<div class="cbub cbot cload">…</div>' : ''}</div>
+    ${sum}
+    <div class="crow"><button class="btn btn-ghost cmic" id="c-mic" onclick="micToggle()" title="Speak instead of typing" aria-label="Voice input">🎤</button>
+      <input id="c-in" placeholder="Type or tap the mic…" maxlength="2000" onkeydown="if(event.key==='Enter')sendConcern()">
+      <button class="btn btn-syrup" onclick="sendConcern()" ${U.cx.busy ? 'disabled' : ''}>Send</button></div>
+    <div class="note bad hide" id="c-err"></div></div>`;
+  const box = $('cchat'); if (box) box.scrollTop = box.scrollHeight;
+  if (!U.cx.busy) { const inp = $('c-in'); if (inp) inp.focus(); }
+}
+async function sendConcern() {
+  const inp = $('c-in'); const msg = (inp.value || '').trim();
+  if (!msg || U.cx.busy) return;
+  U.cx.messages.push({ who: 'me', text: msg }); U.cx.busy = true; inp.value = '';
+  render();
+  try {
+    const r = await api({ action: 'complaintTurn', id: U.id, pin: U.pin, message: msg, history: U.cx.history });
+    U.cx.history.push({ role: 'user', content: msg }, { role: 'assistant', content: r.assistantRaw });
+    U.cx.messages.push({ who: 'bot', text: r.reply.text });
+    if (r.reply.type === 'summary') U.cx.summary = r.reply.summary;
+  } catch (e) {
+    U.cx.messages.push({ who: 'bot', text: e.message });
+  } finally { U.cx.busy = false; render(); }
+}
+async function submitConcern() {
+  if (U.cx.busy) return; U.cx.busy = true; render();
+  try {
+    const r = await api({ action: 'complaintSubmit', id: U.id, pin: U.pin, summary: U.cx.summary, history: U.cx.history });
+    U.cx.submitted = r.complaintId;
+  } catch (e) {
+    U.cx.busy = false; render();
+    const eb = $('c-err'); if (eb) { eb.textContent = e.message; eb.classList.remove('hide'); }
+    return;
+  }
+  U.cx.busy = false; render();
+}
+let REC_ = null;
+function micToggle() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = $('c-mic'), eb = $('c-err');
+  if (!SR) { if (eb) { eb.textContent = 'Voice typing isn’t supported in this browser — you can still type.'; eb.classList.remove('hide'); } return; }
+  if (REC_) { REC_.stop(); REC_ = null; btn && btn.classList.remove('on'); return; }
+  REC_ = new SR(); REC_.lang = 'en-IN'; REC_.interimResults = false; REC_.maxAlternatives = 1;
+  REC_.onresult = ev => { const t = ev.results[0][0].transcript; const inp = $('c-in'); if (inp) inp.value = (inp.value ? inp.value + ' ' : '') + t; };
+  REC_.onerror = () => { btn && btn.classList.remove('on'); REC_ = null; };
+  REC_.onend = () => { btn && btn.classList.remove('on'); REC_ = null; };
+  btn && btn.classList.add('on'); REC_.start();
 }
 
 /* ---------- my details ---------- */
