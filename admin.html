@@ -621,6 +621,7 @@ function shiftPlan() {
   // every employee who could plausibly appear here, not only those with a shift already planned — otherwise a manager or anyone
   // else whose shift for this store/period isn't entered yet (or at all) silently drops out of the "All employees" filter
   const planEmps = D.employees.filter(e => e.status === 'Active' && (b === 'ALL' || e.branch === b || storeRows.some(r => r.s.empId === e.id))).sort((a, b2) => a.name.localeCompare(b2.name));
+  const planEmpsShown = planEmps.filter(e => empMatchesQuery(e, ST.planEmpQ));
   const un = D.plan.unplanned.filter(p => b === 'ALL' || p.store === b);
   const mgrs = D.employees.filter(e => e.roaming === 'Yes' && e.status === 'Active');
   $('#main').innerHTML = `<div class="card">
@@ -637,10 +638,13 @@ function shiftPlan() {
     </div>
     ${D.plan.rows.length ? '' : `<div class="note">No shifts planned for this month yet. Assign stores to managers in <b>Assign managers to stores</b> below, then they plan from the manager app.</div>`}
     <div class="row" style="gap:8px;margin:14px 0 2px">
-      <div style="width:220px"><select onchange="ST.planEmp=this.value;render()"><option value="ALL" ${pe === 'ALL' ? 'selected' : ''}>All employees</option>${planEmps.map(e => `<option value="${e.id}" ${e.id === pe ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`).join('')}</select></div>
+      <div style="width:220px">
+        <input type="text" placeholder="Search name, ID, or 'manager'" value="${esc(ST.planEmpQ || '')}" oninput="ST.planEmpQ=this.value;render()" style="width:100%;margin-bottom:4px">
+        <select onchange="ST.planEmp=this.value;render()"><option value="ALL" ${pe === 'ALL' ? 'selected' : ''}>All employees (${planEmpsShown.length})</option>${planEmpsShown.map(e => `<option value="${e.id}" ${e.id === pe ? 'selected' : ''}>${esc(e.name)} · ${e.id}${e.roaming === 'Yes' ? ' (mgr)' : ''}</option>`).join('')}</select>
+      </div>
       <label class="muted" style="font-size:12px">From<input type="date" style="width:auto;display:block" value="${pf}" onchange="ST.planFrom=this.value;render()"></label>
       <label class="muted" style="font-size:12px">To<input type="date" style="width:auto;display:block" value="${pt}" onchange="ST.planTo=this.value;render()"></label>
-      ${pe !== 'ALL' || pf || pt ? `<button class="btn" onclick="ST.planEmp='ALL';ST.planFrom='';ST.planTo='';render()">Clear</button>` : ''}
+      ${pe !== 'ALL' || pf || pt || ST.planEmpQ ? `<button class="btn" onclick="ST.planEmp='ALL';ST.planEmpQ='';ST.planFrom='';ST.planTo='';render()">Clear</button>` : ''}
     </div>
     <div class="row" style="gap:6px;margin:10px 0 8px">${[['ALL', 'All'], ['REJECTED', 'Rejected'], ['PENDING', 'Waiting'], ['LATE', 'Late'], ['NOSHOW', 'No-show']].map(([k, l]) => `<button class="btn ${f === k ? 'y' : ''}" onclick="ST.planFilter='${k}';render()">${l}</button>`).join('')}</div>
     <div class="scroll"><table><thead><tr><th>Date</th><th>Store</th><th>Employee</th><th>Planned</th><th>Reply</th><th>Actual IN–OUT</th><th>Result</th><th>Planned by</th></tr></thead><tbody>
@@ -969,16 +973,30 @@ async function viewSelfie(id, title) {
 }
 
 /* ---------------- REVIEW ---------------- */
+// Matches an employee against a free-text filter query: substring of name/ID, or a hit on "manager"
+// (any prefix/substring of it) which lists every roaming manager — covers "type Manager, see all managers".
+function empMatchesQuery(e, q) {
+  const s = (q || '').trim().toLowerCase();
+  if (!s) return true;
+  return e.name.toLowerCase().includes(s) || e.id.toLowerCase().includes(s) || ('manager'.includes(s) && e.roaming === 'Yes');
+}
+// For a plain <select> already in the DOM (e.g. inside an openDrawer() form) that isn't rebuilt by
+// the main render() cycle — hides options that don't match instead of re-rendering the whole page.
+function filterEmpSelect(selectId, queryId) {
+  const q = $('#' + queryId).value, sel = $('#' + selectId), D = ST.D;
+  [...sel.options].forEach(o => { const e = D.emp[o.value]; o.hidden = !!e && !empMatchesQuery(e, q); });
+}
 function flags() {
   const D = ST.D;
-  const fb = ST.flagStore || 'ALL', fe = ST.flagEmp || 'ALL', ff = ST.flagFrom || '', ft = ST.flagTo || '';
+  const fb = ST.flagStore || 'ALL', fe = ST.flagEmps || [], ff = ST.flagFrom || '', ft = ST.flagTo || '';
   const fr = ST.flagHideResolved !== false;
   const allIssues = D.issues.filter(i => i.kind !== 'On shift now');
   const resolvedCount = allIssues.filter(i => i.punch.reviewedBy || i.punch.reviewNote).length;
   const base = fr ? allIssues.filter(i => !(i.punch.reviewedBy || i.punch.reviewNote)) : allIssues;
-  const issues = base.filter(i => (fb === 'ALL' || i.punch.store === fb) && (fe === 'ALL' || i.emp.id === fe)
+  const issues = base.filter(i => (fb === 'ALL' || i.punch.store === fb) && (fe.length === 0 || fe.includes(i.emp.id))
     && (!ff || i.punch.time.slice(0, 10) >= ff) && (!ft || i.punch.time.slice(0, 10) <= ft));
   const issueEmps = D.employees.filter(e => base.some(i => i.emp.id === e.id)).sort((a, b) => a.name.localeCompare(b.name));
+  const issueEmpsShown = issueEmps.filter(e => empMatchesQuery(e, ST.flagEmpQ));
   $('#main').innerHTML = `
   <div class="card"><h2>Flagged punches (${D.flagged.length})</h2>
     <p class="muted" style="margin-top:-6px">Not counted in pay until approved. Approve if the selfie is the right person and they were really at work.</p>
@@ -999,15 +1017,19 @@ function flags() {
     <p class="muted" style="margin-top:-6px">An IN with no OUT within 24 h is not paid — add the OUT time (with a reason) if the person forgot. Shifts over 20 h are paid but listed here so someone checks they're real double shifts. Resolving one (by adding the missing punch) removes it from this list right away.${resolvedCount ? ` ${resolvedCount} already reviewed — hidden by default.` : ''}</p>
     <div class="row" style="gap:8px;margin-bottom:10px">
       <div style="width:200px">${branchSelect(fb, "ST.flagStore=this.value;render()")}</div>
-      <div style="width:220px"><select onchange="ST.flagEmp=this.value;render()"><option value="ALL" ${fe === 'ALL' ? 'selected' : ''}>All employees</option>${issueEmps.map(e => `<option value="${e.id}" ${e.id === fe ? 'selected' : ''}>${esc(e.name)} · ${e.id}</option>`).join('')}</select></div>
+      <div style="width:240px">
+        <input type="text" placeholder="Search name, ID, or 'manager'" value="${esc(ST.flagEmpQ || '')}" oninput="ST.flagEmpQ=this.value;render()" style="width:100%;margin-bottom:4px">
+        <select multiple size="${Math.min(6, Math.max(3, issueEmpsShown.length || 1))}" style="width:100%" title="Click, or ctrl/cmd-click, to select one or more employees" onchange="ST.flagEmps=[...this.selectedOptions].map(o=>o.value);render()">${issueEmpsShown.map(e => `<option value="${e.id}" ${fe.includes(e.id) ? 'selected' : ''}>${esc(e.name)} · ${e.id}${e.roaming === 'Yes' ? ' (mgr)' : ''}</option>`).join('') || '<option disabled>No match</option>'}</select>
+        ${fe.length ? `<div class="muted" style="font-size:11px;margin-top:2px">${fe.length} selected</div>` : ''}
+      </div>
       <label class="muted" style="font-size:12px">From<input type="date" style="width:auto;display:block" value="${ff}" onchange="ST.flagFrom=this.value;render()"></label>
       <label class="muted" style="font-size:12px">To<input type="date" style="width:auto;display:block" value="${ft}" onchange="ST.flagTo=this.value;render()"></label>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap"><input type="checkbox" ${fr ? 'checked' : ''} onchange="ST.flagHideResolved=this.checked;render()">Hide reviewed (${resolvedCount})</label>
-      ${fb !== 'ALL' || fe !== 'ALL' || ff || ft ? `<button class="btn" onclick="ST.flagStore='ALL';ST.flagEmp='ALL';ST.flagFrom='';ST.flagTo='';render()">Clear filters</button>` : ''}
+      ${fb !== 'ALL' || fe.length || ff || ft || ST.flagEmpQ ? `<button class="btn" onclick="ST.flagStore='ALL';ST.flagEmps=[];ST.flagEmpQ='';ST.flagFrom='';ST.flagTo='';render()">Clear filters</button>` : ''}
     </div>
     <table><thead><tr><th>Employee</th><th>Problem</th><th>Punch</th><th>Store</th><th></th></tr></thead><tbody>
     ${issues.map(i => `<tr class="click" onclick="if(event.target.tagName!=='BUTTON')showIssueDetail('${i.emp.id}','${i.punch.punchId}')"><td><b>${esc(i.emp.name)}</b> <span class="muted">${i.emp.id}</span></td><td><span class="tag ${i.counted ? 't-warn' : 't-bad'}">${i.kind}</span></td><td>${i.punch.type} ${fmtDT_(i.punch.time)}</td><td>${esc(branchName(i.punch.store))}</td>
-      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${base.length ? 'None match these filters' : 'None'}</td></tr>`}
+      <td>${i.counted ? '<span class="muted">paid as recorded</span>' : `<button class="btn t" onclick="manualDialog('${i.emp.id}','${i.punch.type === 'IN' ? 'OUT' : 'IN'}','${i.punch.time}')">Add ${i.punch.type === 'IN' ? 'OUT' : 'IN'}</button> <button class="btn" title="If this punch itself was mistyped (e.g. a real OUT got logged as a fresh IN because the earlier shift had already aged out), fix it here instead of adding a counterpart" onclick="editPunchDialog('${i.punch.punchId}','${i.punch.type}','${i.punch.time}')">Edit</button>`}</td></tr>`).join('') || `<tr><td colspan="5" class="muted">${base.length ? 'None match these filters' : 'None'}</td></tr>`}
     </tbody></table>
     <button class="btn" style="margin-top:12px" onclick="manualDialog('','IN','')">+ Add a manual punch</button></div>`;
 }
@@ -1020,7 +1042,7 @@ function manualDialog(empId, type, ref) {
   const local = def ? new Date(def.getTime() + 5.5 * 3600000).toISOString().slice(0, 16) : ST.day + 'T09:00';
   openDrawer(`<div class="row"><h2 style="margin:0">Add manual punch</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
     <div class="form" style="margin-top:14px">
-      <label>Employee<select id="m_emp">${D.employees.map(e => `<option value="${e.id}" ${e.id === empId ? 'selected' : ''}>${e.id} · ${esc(e.name)}</option>`).join('')}</select></label>
+      <label>Employee<input type="text" id="m_empQ" placeholder="Search name, ID, or 'manager'" style="margin-bottom:4px" oninput="filterEmpSelect('m_emp','m_empQ')"><select id="m_emp">${D.employees.map(e => `<option value="${e.id}" ${e.id === empId ? 'selected' : ''}>${e.id} · ${esc(e.name)}${e.roaming === 'Yes' ? ' (mgr)' : ''}</option>`).join('')}</select></label>
       <label>Type<select id="m_type"><option ${type === 'IN' ? 'selected' : ''}>IN</option><option ${type === 'OUT' ? 'selected' : ''}>OUT</option></select></label>
       <label>Date &amp; time (IST)<input type="datetime-local" id="m_time" value="${local}"></label>
       <label>Store<select id="m_store">${D.stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('')}</select></label>
@@ -1028,6 +1050,21 @@ function manualDialog(empId, type, ref) {
     <p class="muted">Manual punches count in pay immediately and are written to the audit log with your name.</p>
     <button class="btn y" onclick="saveManual()">Save punch</button>`);
   const e = ST.D.emp[empId]; if (e && D.stores.some(s => s.code === e.branch)) $('#m_store').value = e.branch;
+}
+function editPunchDialog(punchId, type, time) {
+  const local = new Date(new Date(time).getTime() + 5.5 * 3600000).toISOString().slice(0, 16);
+  openDrawer(`<div class="row"><h2 style="margin:0">Edit punch</h2><div class="sp"></div><button class="btn" onclick="closeDrawer()">Close</button></div>
+    <div class="form" style="margin-top:14px">
+      <label>Type<select id="e_type"><option ${type === 'IN' ? 'selected' : ''}>IN</option><option ${type === 'OUT' ? 'selected' : ''}>OUT</option></select></label>
+      <label>Date &amp; time (IST)<input type="datetime-local" id="e_time" value="${local}"></label>
+      <label style="grid-column:1/-1">Reason (required)<input type="text" id="e_note" placeholder="e.g. This was really the OUT for the earlier shift, not a new IN"></label></div>
+    <p class="muted">Retypes or re-times this exact punch (does not add a new one) and is written to the audit log with your name.</p>
+    <button class="btn y" onclick="saveEditPunch('${punchId}')">Save</button>`);
+}
+async function saveEditPunch(punchId) {
+  const t = $('#e_time').value; if (!t) return toast('Pick a time', true);
+  await act({ action: 'editPunch', punchId, type: $('#e_type').value, time: t + ':00+05:30', note: $('#e_note').value }, 'Punch updated');
+  closeDrawer();
 }
 async function saveManual() {
   const t = $('#m_time').value; if (!t) return toast('Pick a time', true);

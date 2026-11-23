@@ -455,7 +455,9 @@ function startGps() {
     readyCheck();
   }, e => {
     S.gpsError = e.code === 1 ? 'permission denied' : e.message;
-    if (!S.best) setGps('bad', e.code === 1 ? 'Location is blocked — allow it in browser settings · இருப்பிட அனுமதி தேவை' : 'Location error: ' + e.message);
+    S.gpsDenied = e.code === 1;
+    if (!S.best) setGps('bad', e.code === 1 ? 'Location is blocked — you cannot punch without it · இருப்பிட அனுமதி இல்லாமல் பதிவு செய்ய முடியாது' : 'Location error: ' + e.message);
+    if (e.code === 1 && !S.gpsDeniedAlerted) { S.gpsDeniedAlerted = true; alert('Location permission is OFF for this site.\nTurn it on in your phone/browser settings and reload this page — punching in/out needs your location, or it will be marked absent.\n\n(தமிழ்) இந்த தளத்திற்கு இருப்பிட அனுமதி இல்லை. உங்கள் தொலைபேசி/உலாவி அமைப்புகளில் அதை இயக்கி, பக்கத்தை மீண்டும் ஏற்றவும் — இல்லையெனில் வருகை பதிவு செய்ய முடியாது, இல்லாதவர் எனப் பதிவாகும்.'); }
     readyCheck();
   }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
 }
@@ -466,7 +468,7 @@ async function startCam() {
   catch (e) { S.cam = false; err('e-punch', (/Virtual/.test(e.message) ? e.message : 'Camera is blocked (' + e.name + '). Allow camera for this site and reload') + ' · கேமரா அனுமதி தேவை'); }
   readyCheck();
 }
-function readyCheck() { $('b-punch').disabled = !(S.cam && (S.best || S.gpsError)); }
+function readyCheck() { $('b-punch').disabled = !(S.cam && (S.best || (S.gpsError && !S.gpsDenied))); }
 
 function ui() {
   return {
