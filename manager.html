@@ -308,7 +308,17 @@ const Live = (() => {
     if (mirror) { g.translate(w, 0); g.scale(-1, 1); }
     g.drawImage(video, 0, 0, w, h); return c;
   }
-  const jpeg = (c, q) => c.toDataURL('image/jpeg', q || 0.72);
+  // Backs off quality until the encoded image is comfortably under the server's upload cap (Code.gs
+  // saveSelfie_ rejects anything over 400KB). Dim lighting or a busy background can push a straight
+  // 0.72-quality encode past that on its own — this keeps the punch's selfie from silently failing to
+  // save instead of raising the server-side cap, which would just move the failure point, not remove it.
+  function jpeg(c, q) {
+    q = q || 0.72;
+    let d = c.toDataURL('image/jpeg', q);
+    let bytes = Math.ceil((d.length - d.indexOf(',') - 1) * 3 / 4);
+    while (bytes > 380 * 1024 && q > 0.35) { q = Math.max(0.35, q - 0.12); d = c.toDataURL('image/jpeg', q); bytes = Math.ceil((d.length - d.indexOf(',') - 1) * 3 / 4); }
+    return d;
+  }
 
   function scores(res) {
     const b = {}; ((res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories) || []).forEach(x => { b[x.categoryName] = x.score; });
