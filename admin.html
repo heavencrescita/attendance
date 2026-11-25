@@ -1508,8 +1508,27 @@ function reqs() {
     <button class="btn" onclick="checkBadFace()">Check how many are affected</button> <span id="bfOut" class="muted"></span>
     <div id="bfList"></div></div>${D.role === 'hr' ? `<div class="card" style="margin-top:14px"><h2>Employee concerns</h2>
     <p class="muted" style="margin-top:-6px">Submitted through My BWC's AI intake chat. Only you see these — the employee saw and confirmed the summary before it was sent.</p>
+    <div id="cplAnalysis" style="margin:10px 0"><p class="muted">Reading the queue…</p></div>
     <div id="cplist"><p class="muted">Loading…</p></div></div>` : ''}` : ''}`;
-  if (D.role === 'hr') loadComplaints();
+  if (D.role === 'hr') { loadComplaints(); loadAnalysis(); }
+}
+async function loadAnalysis(force) {
+  const box = $('#cplAnalysis'); if (!box) return;
+  if (force) box.innerHTML = '<p class="muted">Re-reading the queue…</p>';
+  let r; try { r = await api({ action: 'analyzeComplaints', force: !!force }); }
+  catch (e) { box.innerHTML = `<p class="muted">Couldn't analyze the queue right now — ${esc(e.message)}</p>`; return; }
+  if (!r.openCount) { box.innerHTML = '<p class="muted">Nothing open right now, so nothing to analyze.</p>'; return; }
+  const a = r.analysis || {};
+  const list = (items, render) => items && items.length ? `<ul style="margin:6px 0 2px 18px">${items.map(render).join('')}</ul>` : '';
+  box.innerHTML = `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--chip)">
+    <div class="row"><b>AI read of the ${r.openCount} open complaint${r.openCount === 1 ? '' : 's'}</b><div class="sp"></div>
+      <span class="muted" style="font-size:12px">${r.cached ? 'as of' : 'just now ·'} ${fmtDT_(r.generatedAt)}</span>
+      <button class="btn" style="padding:3px 9px;margin-left:8px" onclick="loadAnalysis(true)">Refresh</button></div>
+    ${a.overview ? `<p style="margin:8px 0 4px">${esc(a.overview)}</p>` : ''}
+    ${a.patterns && a.patterns.length ? `<div class="muted" style="margin-top:8px;font-size:12px">Patterns</div>${list(a.patterns, p => `<li>${esc(p)}</li>`)}` : ''}
+    ${a.priority && a.priority.length ? `<div class="muted" style="margin-top:8px;font-size:12px">Needs attention first</div>${list(a.priority, p => `<li><b>${esc(p.id)}</b> — ${esc(p.why)}</li>`)}` : ''}
+    ${a.recommendations && a.recommendations.length ? `<div class="muted" style="margin-top:8px;font-size:12px">Worth doing</div>${list(a.recommendations, p => `<li>${esc(p)}</li>`)}` : ''}
+  </div>`;
 }
 async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
 async function checkBadFace() {
