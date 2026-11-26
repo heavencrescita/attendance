@@ -594,7 +594,7 @@ function render() {
   const fid = a && a.id, sS = a && 'selectionStart' in a ? a.selectionStart : null, sE = a && 'selectionEnd' in a ? a.selectionEnd : null;
   const D = ST.D, isAdmin = D.role === 'admin' || D.role === 'hr';
   const tabs = [['overview', 'Overview'], ['daily', 'Daily attendance'], ['flags', 'Review', D.flagged.length + D.issues.filter(i => i.kind !== 'On shift now').length],
-    ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll'], ['reqs', 'Staff requests', (D.requests || []).filter(r => r.status === 'PENDING').length]];
+    ['shifts', 'Shift plan', (D.plan.rows || []).filter(r => r.s.status === 'REJECTED' && r.res !== 'Past').length], ['emps', 'Employees'], ['regs', 'Deductions & additions'], ['pay', 'Payroll'], ['reqs', 'Staff requests', (D.requests || []).filter(r => r.status === 'PENDING').length], ['facefails', 'Face checks']];
   if (isAdmin) tabs.push(['stores', 'Stores'], ['users', 'Users']);
   $('#app').innerHTML = `
   <div class="top"><div class="logo">BWC</div><div><h1>The Belgian Waffle Cafe</h1><div class="sub">Attendance &amp; payroll admin</div></div><div class="sp"></div>
@@ -602,7 +602,7 @@ function render() {
     <button class="pill" onclick="pwDialog()"><b>${esc(D.user)}</b> · ${D.role}</button><button class="pill" onclick="logout()">Sign out</button></div>
   <nav>${tabs.map(([k, l, n]) => `<button class="${ST.tab === k ? 'on' : ''}" onclick="go('${k}')">${l}${n ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</nav>
   <main id="main"></main>`;
-  ({ overview, daily, flags, shifts: shiftPlan, emps, regs, pay, stores, users, reqs })[ST.tab]();
+  ({ overview, daily, flags, shifts: shiftPlan, emps, regs, pay, stores, users, reqs, facefails: faceFails })[ST.tab]();
   if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); if (sS !== null) { try { el.setSelectionRange(sS, sE); } catch (e) { } } } }
 }
 function go(t) { ST.tab = t; render(); window.scrollTo(0, 0); }
@@ -1529,6 +1529,40 @@ async function loadAnalysis(force) {
     ${a.priority && a.priority.length ? `<div class="muted" style="margin-top:8px;font-size:12px">Needs attention first</div>${list(a.priority, p => `<li><b>${esc(p.id)}</b> — ${esc(p.why)}</li>`)}` : ''}
     ${a.recommendations && a.recommendations.length ? `<div class="muted" style="margin-top:8px;font-size:12px">Worth doing</div>${list(a.recommendations, p => `<li>${esc(p)}</li>`)}` : ''}
   </div>`;
+}
+const FACE_FAIL_LABELS = {
+  CAMERA_BLOCKED: 'Camera blocked/denied', BLACK_FEED: 'Black screen (camera opened, no picture)', VIRTUAL_CAMERA: 'Virtual camera app detected',
+  CAMERA_LOST: 'Camera feed kept dropping', MODEL_UNAVAILABLE: 'Face model could not load (old phone/no network)',
+  BLACK_FEED_MIDCHECK: 'Black screen mid-check', LIVENESS_FAILED: 'Gesture/liveness not detected', FACE_MATCH_FAILED: 'Face did not match on file', UNKNOWN: 'Other'
+};
+function faceFails() {
+  $('#main').innerHTML = `<div class="card"><h2 style="margin-top:0">Face check failures</h2>
+    <p class="muted" style="margin-top:-6px">Every time an employee's live face/camera check fails on their phone before a punch goes through — camera blocked, gesture not detected, face not matched, etc. These never used to leave a trace; this view is built from ${esc(ST.D.month)}'s log.</p>
+    <div id="ffBox"><p class="muted">Loading…</p></div></div>`;
+  loadFaceFails();
+}
+async function loadFaceFails(force) {
+  const box = $('#ffBox'); if (!box) return;
+  if (force) box.innerHTML = '<p class="muted">Reloading…</p>';
+  let r; try { r = await api({ action: 'faceFailures', month: ST.D.month }); }
+  catch (e) { box.innerHTML = `<p class="muted">Couldn't load — ${esc(e.message)}</p>`; return; }
+  const rows = r.rows || [];
+  if (!rows.length) { box.innerHTML = `<p class="muted">No face-check failures logged for ${esc(ST.D.month)}. <button class="btn" style="padding:3px 9px" onclick="loadFaceFails(true)">Refresh</button></p>`; return; }
+  const byEmp = {};
+  rows.forEach(r => { const k = r.empId; (byEmp[k] = byEmp[k] || { empId: r.empId, name: r.name, total: 0, kinds: {}, last: '' }); const b = byEmp[k];
+    b.total++; b.kinds[r.kind] = (b.kinds[r.kind] || 0) + 1; if (r.ts > b.last) b.last = r.ts; });
+  const emps = Object.values(byEmp).sort((a, b) => b.total - a.total);
+  const kindList = kinds => Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${FACE_FAIL_LABELS[k] || k} × ${n}`).join(', ');
+  box.innerHTML = `<div class="row"><b>${rows.length} failure${rows.length === 1 ? '' : 's'}</b> across ${emps.length} employee${emps.length === 1 ? '' : 's'} this month<div class="sp"></div>
+      <button class="btn" style="padding:3px 9px" onclick="loadFaceFails(true)">Refresh</button></div>
+    <table style="width:100%;border-collapse:collapse;margin-top:10px"><tr style="text-align:left;font-size:12px" class="muted"><th style="padding:4px 6px">Employee</th><th style="padding:4px 6px">Fails</th><th style="padding:4px 6px">Breakdown</th><th style="padding:4px 6px">Last seen</th></tr>
+      ${emps.map(e => `<tr style="border-top:1px solid var(--line)"><td style="padding:6px">${esc(e.name)}<div class="muted" style="font-size:11px">${esc(e.empId)}</div></td>
+        <td style="padding:6px"><b>${e.total}</b></td><td style="padding:6px;font-size:12px">${esc(kindList(e.kinds))}</td><td style="padding:6px;font-size:12px">${fmtDT_(e.last)}</td></tr>`).join('')}
+    </table>
+    <details style="margin-top:14px"><summary class="muted" style="cursor:pointer">Raw log (most recent ${Math.min(rows.length, 100)})</summary>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr class="muted" style="text-align:left"><th style="padding:4px 6px">Time</th><th style="padding:4px 6px">Employee</th><th style="padding:4px 6px">Kind</th><th style="padding:4px 6px">Message</th></tr>
+        ${rows.slice(0, 100).map(r => `<tr style="border-top:1px solid var(--line)"><td style="padding:4px 6px">${fmtDT_(r.ts)}</td><td style="padding:4px 6px">${esc(r.name || r.empId)}</td><td style="padding:4px 6px">${esc(FACE_FAIL_LABELS[r.kind] || r.kind)}</td><td style="padding:4px 6px">${esc(r.message || '')}</td></tr>`).join('')}
+      </table></details>`;
 }
 async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
 async function checkBadFace() {
