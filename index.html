@@ -94,6 +94,23 @@ textarea{width:100%;font-size:16px;padding:10px 12px;border:2px solid var(--line
       </div>
       <span class="chg hide" id="missedLink" onclick="document.getElementById('missedForm').classList.remove('hide')">Report it now →</span>
     </div>
+    <div class="card" id="wrongCard">
+      <div id="wrongForm" class="hide">
+        <b>Fix my attendance</b>
+        <div class="muted" style="font-size:13px;margin-bottom:6px">If a punch of yours was recorded wrong or missing, Sarah can fix it here. · பதிவு தவறாக இருந்தால் சரி செய்யலாம்</div>
+        <label for="w-date">Which day? <span>எந்த நாள்</span></label>
+        <input id="w-date" type="date">
+        <label for="w-in">When did you actually start? <span>தொடங்கிய நேரம்</span></label>
+        <input id="w-in" type="time">
+        <label for="w-out">When did you actually leave? <span>கிளம்பிய நேரம்</span></label>
+        <input id="w-out" type="time">
+        <label for="w-why">What happened? <span>என்ன நடந்தது</span></label>
+        <textarea id="w-why" rows="2" maxlength="300" placeholder="e.g. my punch in this morning was not recorded, so my punch out tonight was saved as another punch in"></textarea>
+        <div class="ans"><button class="g" type="button" onclick="document.getElementById('wrongForm').classList.add('hide');document.getElementById('wrongLink').classList.remove('hide')">Back</button><button class="y" type="button" onclick="sendCorrection()">Send to Sarah</button></div>
+        <div class="err" id="e-wrong"></div>
+      </div>
+      <span class="chg" id="wrongLink" onclick="document.getElementById('wrongForm').classList.remove('hide');document.getElementById('wrongLink').classList.add('hide')">This isn't right — fix my attendance →</span>
+    </div>
     <div class="cam"><video id="video" autoplay playsinline muted></video><div class="oval" id="oval"></div>
       <div class="prompt" id="prompt"><span class="stp" id="p-step"></span><div id="p-en"></div><small id="p-ta"></small></div></div>
     <div class="gps"><span class="dot wait" id="gdot"></span><span id="gtxt">Getting your location… · இருப்பிடம் கண்டறியப்படுகிறது</span></div>
@@ -471,6 +488,17 @@ async function sendMissed() {
     $('missedForm').classList.add('hide'); $('missedLink').classList.add('hide');
   } catch (e) { err('e-missed', e.message); }
 }
+async function sendCorrection() {
+  err('e-wrong');
+  const date = $('w-date').value, inT = $('w-in').value, outT = $('w-out').value, why = $('w-why').value.trim();
+  if (!date) return err('e-wrong', 'Pick the day · நாளைத் தேர்ந்தெடுக்கவும்');
+  if (!inT || !outT) return err('e-wrong', 'Enter both times · இரண்டு நேரங்களையும் உள்ளிடவும்');
+  if (why.length < 5) return err('e-wrong', 'Tell Sarah what happened · என்ன நடந்தது என்று எழுதவும்');
+  try {
+    await api({ action: 'staffRequest', id: S.id, pin: S.pin, kind: 'CORRECTION', data: { date, inT, outT, reason: why } });
+    document.getElementById('wrongForm').innerHTML = '<b>Sent to Sarah for approval.</b> You can carry on punching as usual in the meantime.';
+  } catch (e) { err('e-wrong', e.message); }
+}
 async function answer(id, ans) {
   const fb = ans === 'REJECT' ? (($('fb') || {}).value || '').trim() : '';
   if (ans === 'REJECT' && fb.length < 3) return err('e-' + id, 'Please write a reason · காரணத்தை எழுதவும்');
@@ -491,10 +519,13 @@ async function login() {
     S = { id: st.id, pin, name: st.name, next: st.next, ch: st.challenge, best: null, gpsError: '', missed: st.missedPunch || null, hasFace: !!st.hasFace };
     $('hello').textContent = 'Hi ' + st.name.split(' ')[0] + ' 👋';
     $('state').innerHTML = st.next === 'OUT'
-      ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Now punch OUT.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள்</span>`
-      : `You are not punched in. Start your shift.<br><span class="muted">பணியைத் தொடங்க வருகையைப் பதிவு செய்யவும்</span>`;
+      ? `You punched <b>IN</b> at <b>${fmtTime(st.openSince)}</b> on ${fmtDay(st.openSince)}. Tapping below will record <b>Punch OUT</b> now.<br><span class="muted">${fmtTime(st.openSince)} முதல் பணியில் உள்ளீர்கள் · கீழே அழுத்தினால் Punch OUT பதிவாகும்</span>`
+      : `You are not punched in. Tapping below will record <b>Punch IN</b> now.<br><span class="muted">கீழே அழுத்தினால் Punch IN பதிவாகும்</span>`;
     $('b-punch').innerHTML = (st.next === 'OUT' ? 'Start face check · Punch OUT' : 'Start face check · Punch IN') + '<small>முக சரிபார்ப்பைத் தொடங்கவும்</small>';
     $('missedCard').classList.toggle('hide', !S.missed);
+    document.getElementById('wrongForm').classList.add('hide'); document.getElementById('wrongLink').classList.remove('hide');
+    document.getElementById('w-date').value = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+    document.getElementById('w-in').value = ''; document.getElementById('w-out').value = ''; document.getElementById('w-why').value = ''; err('e-wrong');
     if (S.missed) {
       $('missedMsg').innerHTML = `You punched IN at ${fmtTime(S.missed.time)} on ${fmtDay(S.missed.time)} but it was never closed with a punch OUT — that shift is past the 4:00am cutoff, so you can't close it yourself anymore.` +
         (S.missed.count > 1 ? ` (${S.missed.count} shifts are waiting on this.)` : '') + ` Report it and Sarah will add the OUT time.`;
