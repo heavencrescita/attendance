@@ -360,6 +360,10 @@ const Live = (() => {
 const API = 'https://script.google.com/macros/s/AKfycbzZzIRS-eO9MykhaJ9MEnDy32U5HEWOyf_WioqUlzUulfICsZ1Gm6ohePmuBmDYdAKx/exec';
 const $ = id => document.getElementById(id);
 let S = {}; let cam = null; let watch = null; let autoTimer = null;
+// Bumped every logout — lets a face-check still running after Cancel (or auto-logout) recognize it's
+// stale and stop before it can write a punch, a face descriptor, or a result screen under whichever
+// employee is now logged in. Checked at every resume point in startCheck() after an await.
+let gen = 0;
 let camRetries = 0;   // caps automatic self-healing attempts so a genuinely broken camera doesn't retry forever
 
 // Best-effort diagnostic beacon for a failed face/camera check — fires-and-forgets, never throws,
@@ -568,14 +572,16 @@ function ui() {
 }
 
 async function startCheck() {
+  const myGen = gen;   // if logout() runs before this resolves, a stale continuation must not touch S, the DOM, or send a punch
   err('e-punch'); $('b-punch').disabled = true; $('b-punch').innerHTML = 'Follow the instructions on camera<small>திரையில் உள்ள அறிவுறுத்தல்களைப் பின்பற்றவும்</small>';
   let live;
   try {
     live = await Live.challenge($('video'), S.ch.steps, ui());
   } catch (e) {   // face model could not load (very old phone / no network to the model) — server will refuse this punch outright
     live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam ? cam.label : '' };
-    reportFaceFailure('MODEL_UNAVAILABLE', { message: live.error });
+    if (myGen === gen) reportFaceFailure('MODEL_UNAVAILABLE', { message: live.error });
   }
+  if (myGen !== gen) return;   // employee cancelled/logged out mid-check — stop here, don't touch the new session
   $('prompt').style.display = 'none';
   if (live.method === 'facemesh' && live.error === 'BLACK_FEED') {
     // Stream died mid-check without firing 'ended' — restart the camera itself rather than blaming the employee's face.
@@ -611,15 +617,18 @@ async function startCheck() {
     $('prompt').style.display = 'none';
     if (ec.ok) faceDescriptor = ec.descriptor;
   }
+  if (myGen !== gen) return;   // backstop: covers the descriptor-capture and enroll-capture paths above too — never submit a punch (or a fresh face enrollment) built from a cancelled/logged-out session
   const selfie = live.strip || Live.jpeg(Live.grab($('video'), 480, true), 0.72);
   delete live.strip;
   $('b-punch').innerHTML = 'Saving… <small>சேமிக்கப்படுகிறது</small>';
-  const best = S.best; stopDevices();
+  const best = S.best; const myId = S.id, myPin = S.pin, myNonce = S.ch.nonce; stopDevices();
   try {
-    const r = await api({ action: 'punch', id: S.id, pin: S.pin, nonce: S.ch.nonce, liveness: live, selfie, faceDescriptor,
+    const r = await api({ action: 'punch', id: myId, pin: myPin, nonce: myNonce, liveness: live, selfie, faceDescriptor,
       lat: best ? best.lat : null, lng: best ? best.lng : null, acc: best ? best.accuracy : null, gpsError: S.gpsError, ua: navigator.userAgent });
+    if (myGen !== gen) return;   // result belongs to a session that's already been logged out of — don't show it
     showResult(r);
   } catch (e) {
+    if (myGen !== gen) return;   // the employee already logged out while this punch was in flight — the new session's screen isn't this error's to show
     err('e-punch', 'Not saved: ' + e.message + ' · பதிவு ஆகவில்லை');
     $('b-punch').innerHTML = 'Log in again<small>மீண்டும் உள்நுழையவும்</small>'; $('b-punch').disabled = false; $('b-punch').onclick = logout;
   }
@@ -641,6 +650,7 @@ function stopDevices() {
   if (watch !== null) { navigator.geolocation.clearWatch(watch); watch = null; }
 }
 function logout() {
+  gen++;   // invalidate any startCheck() still in flight for the employee who was just logged out
   stopDevices(); clearInterval(autoTimer); S = {}; SH.list = []; $('shiftCard').classList.add('hide'); $('shiftCard').innerHTML = ''; $('shnote').classList.add('hide');
   $('wid').value = ''; $('pin').value = ''; err('e-login'); err('e-punch'); $('video').srcObject = null; $('prompt').style.display = 'none';
   $('b-punch').onclick = startCheck;

@@ -445,6 +445,7 @@ async function startWiz(code) {
   document.querySelectorAll('.maxacc').forEach(x => x.textContent = M.maxAcc);
   $('b-gps').disabled = true; $('g-acc').textContent = '…'; $('g-bar').style.width = '0%';
   if (!navigator.geolocation) return err('e-wiz', 'This phone cannot share location');
+  if (watch !== null) navigator.geolocation.clearWatch(watch);   // a double-tap or re-entry before the previous watch settled must not leave it running in the background
   watch = navigator.geolocation.watchPosition(p => {
     const c = p.coords; if (!W.best || c.accuracy < W.best.acc) W.best = { lat: c.latitude, lng: c.longitude, acc: c.accuracy };
     const a = Math.round(W.best.acc); $('g-acc').textContent = '±' + a + ' m';
