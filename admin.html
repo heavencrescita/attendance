@@ -1503,10 +1503,10 @@ function reqs() {
   ${(D.role === 'admin' || D.role === 'hr') ? `<div class="card" style="margin-top:14px"><h2>Test account</h2>
     <p class="muted" style="margin-top:-6px">WAFF-901 “Test Employee” works in My BWC and on the punch screen like a real employee, but WAFF-900 to WAFF-999 never count in payroll, the dashboard, exports or the shift planner. Resetting wipes its punches, shifts and requests and loads fresh sample data for this month.</p>
     <button class="btn" onclick="resetTest()">Reset test account</button> <span id="testOut" class="muted"></span></div>
-  <div class="card" style="margin-top:14px"><h2>Face re-enrollment cleanup</h2>
-    <p class="muted" style="margin-top:-6px">Before today, an employee's first punch auto-saved whatever face the camera happened to see — no steady-frame or quality check. Anyone enrolled that way (tag: “self, first punch”) may now be failing the match check on every punch with a face that just doesn't agree with its own bad reference. This clears those references only — never a photo a manager captured through “Enroll face photo” — so the employee simply self-enrolls again on their next punch, this time through the new quality-gated capture. No camera, no admin visit needed per person.</p>
-    <button class="btn" onclick="checkBadFace()">Check how many are affected</button> <span id="bfOut" class="muted"></span>
-    <div id="bfList"></div></div>${D.role === 'hr' ? `<div class="card" style="margin-top:14px"><h2>Employee concerns</h2>
+  <div class="card" style="margin-top:14px"><h2>Force face re-enrollment</h2>
+    <p class="muted" style="margin-top:-6px">Clears one employee's stored face reference so they self-enroll again on their next punch, through the quality-gated capture — useful when someone keeps failing the match check (camera, lighting, or appearance change, say). Pick the employee; nothing is scanned or flagged automatically.</p>
+    <label>Employee<input type="text" id="fr_empQ" placeholder="Search name or ID" style="margin-bottom:4px" oninput="filterEmpSelect('fr_emp','fr_empQ')"><select id="fr_emp">${D.employees.filter(e => e.status === 'Active').sort((a, b) => a.name.localeCompare(b.name)).map(e => `<option value="${e.id}">${e.id} · ${esc(e.name)}</option>`).join('')}</select></label>
+    <button class="btn r" onclick="forceReenroll()">Clear face and require re-enrollment</button> <span id="frOut" class="muted"></span></div>${D.role === 'hr' ? `<div class="card" style="margin-top:14px"><h2>Employee concerns</h2>
     <p class="muted" style="margin-top:-6px">Submitted through My BWC's AI intake chat. Only you see these — the employee saw and confirmed the summary before it was sent.</p>
     <div id="cplAnalysis" style="margin:10px 0"><p class="muted">Reading the queue…</p></div>
     <div id="cplist"><p class="muted">Loading…</p></div></div>` : ''}` : ''}`;
@@ -1565,17 +1565,12 @@ async function loadFaceFails(force) {
       </table></details>`;
 }
 async function resetTest() { const r = await act({ action: 'testAccount' }, 'Test account ready'); $('#testOut').textContent = `Sign in at me.html with ${r.id} · PIN ${r.pin} · ${r.punches} punches, ${r.shifts} shifts loaded`; }
-async function checkBadFace() {
-  const r = await api({ action: 'clearBadFaceEnrollments', apply: false });
-  if (!r.count) { $('#bfOut').textContent = 'None found — every stored face reference looks supervised.'; $('#bfList').innerHTML = ''; return; }
-  $('#bfOut').textContent = `${r.count} employee${r.count === 1 ? '' : 's'} self-enrolled before the quality gate shipped.`;
-  $('#bfList').innerHTML = `<ul style="margin:8px 0 10px 18px">${r.employees.map(e => `<li>${e.id} — ${esc(e.name)} <span class="muted">(enrolled ${fmtD_(String(e.enrolledAt).slice(0, 10))})</span></li>`).join('')}</ul>
-    <button class="btn r" onclick="applyClearBadFace(${r.count})">Clear all ${r.count} and require re-enrollment</button>`;
-}
-async function applyClearBadFace(n) {
-  if (!confirm(`Clear the stored face photo for ${n} employee(s)? They'll self-enroll again on their next punch. This can't be undone, but re-enrollment takes seconds.`)) return;
-  const r = await act({ action: 'clearBadFaceEnrollments', apply: true }, 'Cleared — affected employees will self-enroll on next punch');
-  $('#bfOut').textContent = `Cleared ${r.count} employee(s).`; $('#bfList').innerHTML = '';
+async function forceReenroll() {
+  const id = $('#fr_emp').value; if (!id) return;
+  const e = ST.D.emp[id]; const label = e ? e.name : id;
+  if (!confirm(`Clear ${label}'s stored face photo? They'll self-enroll again on their next punch. This can't be undone, but re-enrollment takes seconds.`)) return;
+  const r = await act({ action: 'forceFaceReenroll', empId: id }, `Cleared — ${label} will self-enroll on next punch`);
+  $('#frOut').textContent = r.hadFace ? `Done — ${label}'s face was cleared.` : `Done — ${label} had no face on file to clear.`;
 }
 function transcriptView_(raw) {
   let turns = []; try { turns = JSON.parse(raw || '[]'); } catch (e) {}
