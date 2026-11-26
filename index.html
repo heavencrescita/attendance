@@ -362,6 +362,24 @@ const $ = id => document.getElementById(id);
 let S = {}; let cam = null; let watch = null; let autoTimer = null;
 let camRetries = 0;   // caps automatic self-healing attempts so a genuinely broken camera doesn't retry forever
 
+// Best-effort diagnostic beacon for a failed face/camera check — fires-and-forgets, never throws,
+// never blocks or changes the retry flow the employee sees. Lets HR see *why* checks are failing
+// (dark store, repeated gesture misses, blocked camera…) instead of only hearing about it secondhand.
+function reportFaceFailure(kind, detail) {
+  try {
+    if (!S.id) return;
+    const body = {
+      action: 'faceCheckFailure', empId: S.id, kind: String(kind || 'UNKNOWN'),
+      message: String((detail && (detail.error || detail.message)) || detail || ''),
+      maxFaces: detail && detail.maxFaces != null ? detail.maxFaces : null,
+      durationMs: detail && detail.durationMs != null ? detail.durationMs : null,
+      steps: (detail && detail.steps) || null,
+      cameraLabel: cam ? cam.label : '', ua: navigator.userAgent
+    };
+    fetch(API, { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(() => {});
+  } catch (e) {}
+}
+
 function show(id) { ['s-login', 's-punch', 's-result'].forEach(s => $(s).classList.toggle('hide', s !== id)); $('mylink').classList.toggle('hide', id !== 's-login'); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 function fmtTime(iso) { return iso ? iso.slice(11, 16) : ''; }
@@ -511,6 +529,8 @@ async function startCam(silent) {
     cam.track.addEventListener('ended', onCamLost);   // OS/browser killed the stream (screen lock, backgrounding, another app grabbed the camera) — notice it instead of leaving a black box forever
   } catch (e) {
     S.cam = false;
+    const kind = e.code === 'BLACK_FEED' ? 'BLACK_FEED' : /Virtual/.test(e.message) ? 'VIRTUAL_CAMERA' : 'CAMERA_BLOCKED';
+    reportFaceFailure(kind, { message: e.message });
     const msg = e.code === 'BLACK_FEED' ? 'Camera opened but shows a black screen — this is usually another app using the camera, or the phone needs a moment. Tap Restart camera, or close other camera apps and reload.'
       : /Virtual/.test(e.message) ? e.message
       : 'Camera is blocked (' + e.name + '). Allow camera for this site and reload';
@@ -526,6 +546,7 @@ function onCamLost() {
     err('e-punch', 'Camera feed stopped — restarting… · கேமரா மீண்டும் தொடங்குகிறது');
     startCam(true);
   } else {
+    reportFaceFailure('CAMERA_LOST', { message: 'camera feed lost repeatedly, exceeded auto-heal retries' });
     err('e-punch', 'Camera keeps losing its feed — tap Restart camera, or reload the page · கேமரா தொடர்ந்து துண்டிக்கப்படுகிறது');
     $('b-camRetry').classList.remove('hide');
   }
@@ -553,15 +574,18 @@ async function startCheck() {
     live = await Live.challenge($('video'), S.ch.steps, ui());
   } catch (e) {   // face model could not load (very old phone / no network to the model) — server will refuse this punch outright
     live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam ? cam.label : '' };
+    reportFaceFailure('MODEL_UNAVAILABLE', { message: live.error });
   }
   $('prompt').style.display = 'none';
   if (live.method === 'facemesh' && live.error === 'BLACK_FEED') {
     // Stream died mid-check without firing 'ended' — restart the camera itself rather than blaming the employee's face.
+    reportFaceFailure('BLACK_FEED_MIDCHECK', live);
     camRetries = 0; startCam();
     $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try again<small>மீண்டும் முயற்சிக்கவும்</small>';
     return err('e-punch', 'Camera feed stopped during the check — restarting the camera · கேமரா மீண்டும் தொடங்குகிறது');
   }
   if (live.method === 'facemesh' && !live.passed) {
+    reportFaceFailure('LIVENESS_FAILED', live);
     $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
     return err('e-punch', (live.error || 'The actions were not detected. Keep only your face in the oval, in good light, and do each action clearly.') + ' · மீண்டும் முயற்சிக்கவும்');
   }
@@ -574,6 +598,7 @@ async function startCheck() {
       if (!faceDescriptor) await new Promise(r => setTimeout(r, 200));
     }
     if (!faceDescriptor) {
+      reportFaceFailure('FACE_MATCH_FAILED', live);
       $('b-punch').disabled = false; $('b-punch').innerHTML = 'Try the face check again<small>மீண்டும் முயற்சிக்கவும்</small>';
       return err('e-punch', 'Could not get a clear face match — keep only your face in the oval, in good light · மீண்டும் முயற்சிக்கவும்');
     }

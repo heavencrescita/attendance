@@ -402,6 +402,18 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&am
 function show(id) { ['s-login', 's-home', 's-plan', 's-petty', 's-stores', 's-wiz'].forEach(s => $(s).classList.toggle('hide', s !== id)); window.scrollTo(0, 0); }
 function err(box, msg) { const e = $(box); e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
 async function api(body) { const r = await fetch(API, { method: 'POST', body: JSON.stringify(body) }); const j = await r.json(); if (!j.ok) throw new Error(j.error || 'Something went wrong'); return j; }
+// Best-effort diagnostic beacon for a failed face/camera check — see index.html for the staff-side twin.
+function reportFaceFailure(kind, detail) {
+  try {
+    if (!M.id) return;
+    const body = { action: 'faceCheckFailure', empId: M.id, kind: String(kind || 'UNKNOWN'),
+      message: String((detail && (detail.error || detail.message)) || detail || ''),
+      maxFaces: detail && detail.maxFaces != null ? detail.maxFaces : null,
+      durationMs: detail && detail.durationMs != null ? detail.durationMs : null,
+      steps: (detail && detail.steps) || null, cameraLabel: cam ? cam.label : '', ua: navigator.userAgent };
+    fetch(API, { method: 'POST', body: JSON.stringify(body), keepalive: true }).catch(() => {});
+  } catch (e) {}
+}
 
 async function login() {
   err('e-login'); $('b-login').disabled = true;
@@ -450,7 +462,7 @@ async function toSelfie() {
   err('e-wiz'); panel('w-cam'); stepBar(2); W.mode = 'selfie';
   $('c-title').textContent = 'Step 2 · Live selfie'; $('c-sub').textContent = 'Proves the manager is here now. Follow the 2 actions shown.';
   $('b-cap').textContent = 'Start face check'; $('b-cap').disabled = false;
-  try { await openCam('user'); } catch (e) { err('e-wiz', e.message); }
+  try { await openCam('user'); } catch (e) { reportFaceFailure(e.code === 'BLACK_FEED' ? 'BLACK_FEED' : /Virtual/.test(e.message) ? 'VIRTUAL_CAMERA' : 'CAMERA_BLOCKED', { message: e.message }); err('e-wiz', e.message); }
 }
 async function toPhoto(which) {
   err('e-wiz'); panel('w-cam'); W.mode = which; stepBar(which === 'outside' ? 3 : 4);
@@ -466,9 +478,9 @@ async function capture() {
       const ui = { cameraLabel: cam.label, prompt: (en, ta) => { $('prompt').style.display = 'block'; $('p-en').textContent = en; $('p-ta').textContent = ta; }, face: n => $('oval').classList.toggle('ok', n === 1) };
       let live;
       try { live = await Live.challenge($('video'), M.ch.steps, ui); }
-      catch (e) { live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam.label }; }
+      catch (e) { live = { method: 'unavailable', error: String(e.message || e), cameraLabel: cam.label }; reportFaceFailure('MODEL_UNAVAILABLE', live); }
       $('prompt').style.display = 'none';
-      if (live.method === 'facemesh' && !live.passed) { $('b-cap').disabled = false; $('b-cap').textContent = 'Try the face check again'; return err('e-wiz', live.error || 'Actions not detected — face in the oval, good light, do each action clearly.'); }
+      if (live.method === 'facemesh' && !live.passed) { reportFaceFailure(live.error === 'BLACK_FEED' ? 'BLACK_FEED_MIDCHECK' : 'LIVENESS_FAILED', live); $('b-cap').disabled = false; $('b-cap').textContent = 'Try the face check again'; return err('e-wiz', live.error || 'Actions not detected — face in the oval, good light, do each action clearly.'); }
       W.selfie = live.strip || Live.jpeg(Live.grab($('video'), 480, true)); delete live.strip; W.liveness = live;
       return toPhoto('outside');
     }
